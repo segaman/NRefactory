@@ -50,7 +50,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		internal const ushort FlagShadowing = 0x0008;
 		internal const ushort FlagSynthetic = 0x0010;
 		internal const ushort FlagStatic    = 0x0020;
-		// flags for DefaultUnresolvedTypeDefinition
+		// flags for DefaultUnresolvedTypeDefinition/LazyCecilTypeDefinition
 		internal const ushort FlagAddDefaultConstructorIfRequired = 0x0040;
 		internal const ushort FlagHasExtensionMethods = 0x0080;
 		internal const ushort FlagHasNoExtensionMethods = 0x0100;
@@ -101,7 +101,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		{
 			internal DomRegion region;
 			internal DomRegion bodyRegion;
-			internal IParsedFile parsedFile;
+			internal IUnresolvedFile unresolvedFile;
 			
 			protected internal virtual void FreezeInternal()
 			{
@@ -148,11 +148,11 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			}
 		}
 		
-		public IParsedFile ParsedFile {
-			get { return rareFields != null ? rareFields.parsedFile : null; }
+		public IUnresolvedFile UnresolvedFile {
+			get { return rareFields != null ? rareFields.unresolvedFile : null; }
 			set {
 				if (value != null || rareFields != null)
-					WriteRareFields().parsedFile = value;
+					WriteRareFields().unresolvedFile = value;
 			}
 		}
 		

@@ -1,4 +1,4 @@
-// 
+﻿// 
 // CSharpParameterCompletionEngine.cs
 //  
 // Author:
@@ -53,7 +53,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 
 		public ExpressionResult GetIndexerBeforeCursor()
 		{
-			CompilationUnit baseUnit;
+			SyntaxTree baseUnit;
 			if (currentMember == null && currentType == null) { 
 				return null;
 			}
@@ -73,7 +73,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 		
 		public ExpressionResult GetConstructorInitializerBeforeCursor()
 		{
-			CompilationUnit baseUnit;
+			SyntaxTree baseUnit;
 			if (currentMember == null && currentType == null) { 
 				return null;
 			}
@@ -88,7 +88,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 		
 		public ExpressionResult GetTypeBeforeCursor()
 		{
-			CompilationUnit baseUnit;
+			SyntaxTree baseUnit;
 			if (currentMember == null && currentType == null) { 
 				return null;
 			}
@@ -121,7 +121,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 				yield return method;	
 			}
 				
-			foreach (var extMethods in resolveResult.GetExtensionMethods ()) {
+			foreach (var extMethods in resolveResult.GetEligibleExtensionMethods (true)) {
 				foreach (var method in extMethods) {
 					yield return method;
 				}

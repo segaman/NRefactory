@@ -92,7 +92,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		}
 		#endregion
 		
-		#region IsOpen / IsUnbound
+		#region IsOpen / IsUnbound / IsKnownType
 		sealed class TypeClassificationVisitor : TypeVisitor
 		{
 			internal bool isOpen;
@@ -139,6 +139,16 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			if (type == null)
 				throw new ArgumentNullException("type");
 			return type is ITypeDefinition && type.TypeParameterCount > 0;
+		}
+		
+		/// <summary>
+		/// Gets whether the type is the specified known type.
+		/// For generic known types, this returns true any parameterization of the type (and also for the definition itself).
+		/// </summary>
+		public static bool IsKnownType(this IType type, KnownTypeCode knownType)
+		{
+			var def = type.GetDefinition();
+			return def != null && def.KnownTypeCode == knownType;
 		}
 		#endregion
 		
@@ -258,7 +268,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		/// Gets all unresolved type definitions from the file.
 		/// For partial classes, each part is returned.
 		/// </summary>
-		public static IEnumerable<IUnresolvedTypeDefinition> GetAllTypeDefinitions (this IParsedFile file)
+		public static IEnumerable<IUnresolvedTypeDefinition> GetAllTypeDefinitions (this IUnresolvedFile file)
 		{
 			return TreeTraversal.PreOrder(file.TopLevelTypeDefinitions, t => t.NestedTypes);
 		}
@@ -290,7 +300,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		/// Gets the type (potentially a nested type) defined at the specified location.
 		/// Returns null if no type is defined at that location.
 		/// </summary>
-		public static IUnresolvedTypeDefinition GetInnermostTypeDefinition (this IParsedFile file, int line, int column)
+		public static IUnresolvedTypeDefinition GetInnermostTypeDefinition (this IUnresolvedFile file, int line, int column)
 		{
 			return file.GetInnermostTypeDefinition (new TextLocation (line, column));
 		}
@@ -299,7 +309,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		/// Gets the member defined at the specified location.
 		/// Returns null if no member is defined at that location.
 		/// </summary>
-		public static IUnresolvedMember GetMember (this IParsedFile file, int line, int column)
+		public static IUnresolvedMember GetMember (this IUnresolvedFile file, int line, int column)
 		{
 			return file.GetMember (new TextLocation (line, column));
 		}

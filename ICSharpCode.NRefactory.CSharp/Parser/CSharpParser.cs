@@ -36,12 +36,14 @@ namespace ICSharpCode.NRefactory.CSharp
 {
 	public class CSharpParser
 	{
+		CompilerSettings compilerSettings;
+		
 		class ConversionVisitor : StructuralVisitor
 		{
-			CompilationUnit unit = new CompilationUnit ();
+			SyntaxTree unit = new SyntaxTree ();
 			internal bool convertTypeSystemMode;
 			
-			public CompilationUnit Unit {
+			public SyntaxTree Unit {
 				get {
 					return unit;
 				}
@@ -244,12 +246,12 @@ namespace ICSharpCode.NRefactory.CSharp
 				if (typeName is SpecialContraintExpr) {
 					var sce = (SpecialContraintExpr)typeName;
 					switch (sce.Constraint) {
-					case SpecialConstraint.Class:
-						return new PrimitiveType ("class", Convert (sce.Location));
-					case SpecialConstraint.Struct:
-						return new PrimitiveType ("struct", Convert (sce.Location));
-					case SpecialConstraint.Constructor:
-						return new PrimitiveType ("new", Convert (sce.Location));
+						case SpecialConstraint.Class:
+							return new PrimitiveType ("class", Convert (sce.Location));
+						case SpecialConstraint.Struct:
+							return new PrimitiveType ("struct", Convert (sce.Location));
+						case SpecialConstraint.Constructor:
+							return new PrimitiveType ("new", Convert (sce.Location));
 					}
 				}
 				return new SimpleType ("unknown");
@@ -333,12 +335,16 @@ namespace ICSharpCode.NRefactory.CSharp
 					if (loc != null && pos < loc.Count)
 						result.AddChild (new CSharpTokenNode (Convert (loc [pos++])), Roles.Colon);
 				}
-				
+
+				int attributeCount = 0;
 				foreach (var attr in GetAttributes (optAttributes)) {
 					result.AddChild (attr, Roles.Attribute);
+					attributeCount++;
 				}
+				// Left and right bracket + commas between the attributes
+				int locCount = 2 + attributeCount - 1;
 				// optional comma
-				if (loc != null && pos < loc.Count - 1 && !loc [pos].Equals (loc [pos + 1]))
+				if (loc != null && pos < loc.Count - 1 && loc.Count == locCount + 1)
 					result.AddChild (new CSharpTokenNode (Convert (loc [pos++])), Roles.Comma);
 				if (loc != null && pos < loc.Count)
 					result.AddChild (new CSharpTokenNode (Convert (loc [pos++])), Roles.RBracket);
@@ -666,7 +672,7 @@ namespace ICSharpCode.NRefactory.CSharp
 				if (namespaceStack.Count > 0) {
 					namespaceStack.Peek ().AddChild (child, NamespaceDeclaration.MemberRole);
 				} else {
-					unit.AddChild (child, CompilationUnit.MemberRole);
+					unit.AddChild (child, SyntaxTree.MemberRole);
 				}
 			}
 			
@@ -2182,21 +2188,21 @@ namespace ICSharpCode.NRefactory.CSharp
 			{
 				var result = new UnaryOperatorExpression ();
 				switch (unaryExpression.Oper) {
-				case Unary.Operator.UnaryPlus:
-					result.Operator = UnaryOperatorType.Plus;
-					break;
-				case Unary.Operator.UnaryNegation:
-					result.Operator = UnaryOperatorType.Minus;
-					break;
-				case Unary.Operator.LogicalNot:
-					result.Operator = UnaryOperatorType.Not;
-					break;
-				case Unary.Operator.OnesComplement:
-					result.Operator = UnaryOperatorType.BitNot;
-					break;
-				case Unary.Operator.AddressOf:
-					result.Operator = UnaryOperatorType.AddressOf;
-					break;
+					case Unary.Operator.UnaryPlus:
+						result.Operator = UnaryOperatorType.Plus;
+						break;
+					case Unary.Operator.UnaryNegation:
+						result.Operator = UnaryOperatorType.Minus;
+						break;
+					case Unary.Operator.LogicalNot:
+						result.Operator = UnaryOperatorType.Not;
+						break;
+					case Unary.Operator.OnesComplement:
+						result.Operator = UnaryOperatorType.BitNot;
+						break;
+					case Unary.Operator.AddressOf:
+						result.Operator = UnaryOperatorType.AddressOf;
+						break;
 				}
 				result.AddChild (new CSharpTokenNode (Convert (unaryExpression.Location)), UnaryOperatorExpression.GetOperatorRole (result.Operator));
 				if (unaryExpression.Expr != null)
@@ -2211,27 +2217,27 @@ namespace ICSharpCode.NRefactory.CSharp
 					return result;
 				var expression = (Expression)unaryMutatorExpression.Expr.Accept (this);
 				switch (unaryMutatorExpression.UnaryMutatorMode) {
-				case UnaryMutator.Mode.PostDecrement:
-					result.Operator = UnaryOperatorType.PostDecrement;
-					result.AddChild (expression, Roles.Expression);
-					result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.DecrementRole);
-					break;
-				case UnaryMutator.Mode.PostIncrement:
-					result.Operator = UnaryOperatorType.PostIncrement;
-					result.AddChild (expression, Roles.Expression);
-					result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.IncrementRole);
-					break;
+					case UnaryMutator.Mode.PostDecrement:
+						result.Operator = UnaryOperatorType.PostDecrement;
+						result.AddChild (expression, Roles.Expression);
+						result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.DecrementRole);
+						break;
+					case UnaryMutator.Mode.PostIncrement:
+						result.Operator = UnaryOperatorType.PostIncrement;
+						result.AddChild (expression, Roles.Expression);
+						result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.IncrementRole);
+						break;
 						
-				case UnaryMutator.Mode.PreIncrement:
-					result.Operator = UnaryOperatorType.Increment;
-					result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.IncrementRole);
-					result.AddChild (expression, Roles.Expression);
-					break;
-				case UnaryMutator.Mode.PreDecrement:
-					result.Operator = UnaryOperatorType.Decrement;
-					result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.DecrementRole);
-					result.AddChild (expression, Roles.Expression);
-					break;
+					case UnaryMutator.Mode.PreIncrement:
+						result.Operator = UnaryOperatorType.Increment;
+						result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.IncrementRole);
+						result.AddChild (expression, Roles.Expression);
+						break;
+					case UnaryMutator.Mode.PreDecrement:
+						result.Operator = UnaryOperatorType.Decrement;
+						result.AddChild (new CSharpTokenNode (Convert (unaryMutatorExpression.Location)), UnaryOperatorExpression.DecrementRole);
+						result.AddChild (expression, Roles.Expression);
+						break;
 				}
 				
 				return result;
@@ -2327,65 +2333,67 @@ namespace ICSharpCode.NRefactory.CSharp
 			{
 				var result = new BinaryOperatorExpression ();
 				switch (binaryExpression.Oper) {
-				case Binary.Operator.Multiply:
-					result.Operator = BinaryOperatorType.Multiply;
-					break;
-				case Binary.Operator.Division:
-					result.Operator = BinaryOperatorType.Divide;
-					break;
-				case Binary.Operator.Modulus:
-					result.Operator = BinaryOperatorType.Modulus;
-					break;
-				case Binary.Operator.Addition:
-					result.Operator = BinaryOperatorType.Add;
-					break;
-				case Binary.Operator.Subtraction:
-					result.Operator = BinaryOperatorType.Subtract;
-					break;
-				case Binary.Operator.LeftShift:
-					result.Operator = BinaryOperatorType.ShiftLeft;
-					break;
-				case Binary.Operator.RightShift:
-					result.Operator = BinaryOperatorType.ShiftRight;
-					break;
-				case Binary.Operator.LessThan:
-					result.Operator = BinaryOperatorType.LessThan;
-					break;
-				case Binary.Operator.GreaterThan:
-					result.Operator = BinaryOperatorType.GreaterThan;
-					break;
-				case Binary.Operator.LessThanOrEqual:
-					result.Operator = BinaryOperatorType.LessThanOrEqual;
-					break;
-				case Binary.Operator.GreaterThanOrEqual:
-					result.Operator = BinaryOperatorType.GreaterThanOrEqual;
-					break;
-				case Binary.Operator.Equality:
-					result.Operator = BinaryOperatorType.Equality;
-					break;
-				case Binary.Operator.Inequality:
-					result.Operator = BinaryOperatorType.InEquality;
-					break;
-				case Binary.Operator.BitwiseAnd:
-					result.Operator = BinaryOperatorType.BitwiseAnd;
-					break;
-				case Binary.Operator.ExclusiveOr:
-					result.Operator = BinaryOperatorType.ExclusiveOr;
-					break;
-				case Binary.Operator.BitwiseOr:
-					result.Operator = BinaryOperatorType.BitwiseOr;
-					break;
-				case Binary.Operator.LogicalAnd:
-					result.Operator = BinaryOperatorType.ConditionalAnd;
-					break;
-				case Binary.Operator.LogicalOr:
-					result.Operator = BinaryOperatorType.ConditionalOr;
-					break;
+					case Binary.Operator.Multiply:
+						result.Operator = BinaryOperatorType.Multiply;
+						break;
+					case Binary.Operator.Division:
+						result.Operator = BinaryOperatorType.Divide;
+						break;
+					case Binary.Operator.Modulus:
+						result.Operator = BinaryOperatorType.Modulus;
+						break;
+					case Binary.Operator.Addition:
+						result.Operator = BinaryOperatorType.Add;
+						break;
+					case Binary.Operator.Subtraction:
+						result.Operator = BinaryOperatorType.Subtract;
+						break;
+					case Binary.Operator.LeftShift:
+						result.Operator = BinaryOperatorType.ShiftLeft;
+						break;
+					case Binary.Operator.RightShift:
+						result.Operator = BinaryOperatorType.ShiftRight;
+						break;
+					case Binary.Operator.LessThan:
+						result.Operator = BinaryOperatorType.LessThan;
+						break;
+					case Binary.Operator.GreaterThan:
+						result.Operator = BinaryOperatorType.GreaterThan;
+						break;
+					case Binary.Operator.LessThanOrEqual:
+						result.Operator = BinaryOperatorType.LessThanOrEqual;
+						break;
+					case Binary.Operator.GreaterThanOrEqual:
+						result.Operator = BinaryOperatorType.GreaterThanOrEqual;
+						break;
+					case Binary.Operator.Equality:
+						result.Operator = BinaryOperatorType.Equality;
+						break;
+					case Binary.Operator.Inequality:
+						result.Operator = BinaryOperatorType.InEquality;
+						break;
+					case Binary.Operator.BitwiseAnd:
+						result.Operator = BinaryOperatorType.BitwiseAnd;
+						break;
+					case Binary.Operator.ExclusiveOr:
+						result.Operator = BinaryOperatorType.ExclusiveOr;
+						break;
+					case Binary.Operator.BitwiseOr:
+						result.Operator = BinaryOperatorType.BitwiseOr;
+						break;
+					case Binary.Operator.LogicalAnd:
+						result.Operator = BinaryOperatorType.ConditionalAnd;
+						break;
+					case Binary.Operator.LogicalOr:
+						result.Operator = BinaryOperatorType.ConditionalOr;
+						break;
 				}
 				
 				if (binaryExpression.Left != null)
 					result.AddChild ((Expression)binaryExpression.Left.Accept (this), BinaryOperatorExpression.LeftRole);
-				result.AddChild (new CSharpTokenNode (Convert (binaryExpression.Location)), BinaryOperatorExpression.GetOperatorRole (result.Operator));
+				var location = LocationsBag.GetLocations (binaryExpression);
+				if (location != null)
+					result.AddChild (new CSharpTokenNode (Convert (location[0])), BinaryOperatorExpression.GetOperatorRole (result.Operator));
 				if (binaryExpression.Right != null)
 					result.AddChild ((Expression)binaryExpression.Right.Accept (this), BinaryOperatorExpression.RightRole);
 				return result;
@@ -2397,7 +2405,9 @@ namespace ICSharpCode.NRefactory.CSharp
 				result.Operator = BinaryOperatorType.NullCoalescing;
 				if (nullCoalescingOperator.LeftExpression != null)
 					result.AddChild ((Expression)nullCoalescingOperator.LeftExpression.Accept (this), BinaryOperatorExpression.LeftRole);
-				result.AddChild (new CSharpTokenNode (Convert (nullCoalescingOperator.Location)), BinaryOperatorExpression.NullCoalescingRole);
+				var location = LocationsBag.GetLocations (nullCoalescingOperator);
+				if (location != null)
+					result.AddChild (new CSharpTokenNode (Convert (location[0])), BinaryOperatorExpression.NullCoalescingRole);
 				if (nullCoalescingOperator.RightExpression != null)
 					result.AddChild ((Expression)nullCoalescingOperator.RightExpression.Accept (this), BinaryOperatorExpression.RightRole);
 				return result;
@@ -2435,29 +2445,29 @@ namespace ICSharpCode.NRefactory.CSharp
 					ParameterDeclaration parameterDeclarationExpression = new ParameterDeclaration ();
 					AddAttributeSection (parameterDeclarationExpression, p);
 					switch (p.ModFlags) {
-					case Parameter.Modifier.OUT:
-						parameterDeclarationExpression.ParameterModifier = ParameterModifier.Out;
-						if (location != null)
-							parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.OutModifierRole);
-						break;
-					case Parameter.Modifier.REF:
-						parameterDeclarationExpression.ParameterModifier = ParameterModifier.Ref;
-						if (location != null)
-							parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.RefModifierRole);
-						break;
-					case Parameter.Modifier.PARAMS:
-						parameterDeclarationExpression.ParameterModifier = ParameterModifier.Params;
-						if (location != null)
-							parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.ParamsModifierRole);
-						break;
-					default:
-						if (p.HasExtensionMethodModifier) {
-							parameterDeclarationExpression.ParameterModifier = ParameterModifier.This;
-							if (location != null) {
-								parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.ThisModifierRole);
+						case Parameter.Modifier.OUT:
+							parameterDeclarationExpression.ParameterModifier = ParameterModifier.Out;
+							if (location != null)
+								parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.OutModifierRole);
+							break;
+						case Parameter.Modifier.REF:
+							parameterDeclarationExpression.ParameterModifier = ParameterModifier.Ref;
+							if (location != null)
+								parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.RefModifierRole);
+							break;
+						case Parameter.Modifier.PARAMS:
+							parameterDeclarationExpression.ParameterModifier = ParameterModifier.Params;
+							if (location != null)
+								parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.ParamsModifierRole);
+							break;
+						default:
+							if (p.HasExtensionMethodModifier) {
+								parameterDeclarationExpression.ParameterModifier = ParameterModifier.This;
+								if (location != null) {
+									parameterDeclarationExpression.AddChild (new CSharpTokenNode (Convert (location [0])), ParameterDeclaration.ThisModifierRole);
+								}
 							}
-						}
-						break;
+							break;
 					}
 					if (p.TypeExpression != null) // lambdas may have no types (a, b) => ...
 						parameterDeclarationExpression.AddChild (ConvertToType (p.TypeExpression), Roles.Type);
@@ -2492,33 +2502,33 @@ namespace ICSharpCode.NRefactory.CSharp
 					
 					List<Location> varianceLocation;
 					switch (arg.Variance) {
-					case Variance.Contravariant:
-						tp.Variance = VarianceModifier.Contravariant;
-						varianceLocation = LocationsBag.GetLocations (arg);
-						if (varianceLocation != null)
-							tp.AddChild (new CSharpTokenNode (Convert (varianceLocation [0])), TypeParameterDeclaration.InVarianceKeywordRole);
-						break;
-					case Variance.Covariant:
-						tp.Variance = VarianceModifier.Covariant;
-						varianceLocation = LocationsBag.GetLocations (arg);
-						if (varianceLocation != null)
-							tp.AddChild (new CSharpTokenNode (Convert (varianceLocation [0])), TypeParameterDeclaration.OutVarianceKeywordRole);
-						break;
-					default:
-						tp.Variance = VarianceModifier.Invariant;
-						break;
-						
+						case Variance.Contravariant:
+							tp.Variance = VarianceModifier.Contravariant;
+							varianceLocation = LocationsBag.GetLocations (arg);
+							if (varianceLocation != null)
+								tp.AddChild (new CSharpTokenNode (Convert (varianceLocation [0])), TypeParameterDeclaration.InVarianceKeywordRole);
+							break;
+						case Variance.Covariant:
+							tp.Variance = VarianceModifier.Covariant;
+							varianceLocation = LocationsBag.GetLocations (arg);
+							if (varianceLocation != null)
+								tp.AddChild (new CSharpTokenNode (Convert (varianceLocation [0])), TypeParameterDeclaration.OutVarianceKeywordRole);
+							break;
+						default:
+							tp.Variance = VarianceModifier.Invariant;
+							break;
+							
 					}
 					
 					AddAttributeSection (tp, arg.OptAttributes);
 
 					switch (arg.Variance) {
-					case Variance.Covariant:
-						tp.Variance = VarianceModifier.Covariant;
-						break;
-					case Variance.Contravariant:
-						tp.Variance = VarianceModifier.Contravariant;
-						break;
+						case Variance.Covariant:
+							tp.Variance = VarianceModifier.Covariant;
+							break;
+						case Variance.Contravariant:
+							tp.Variance = VarianceModifier.Contravariant;
+							break;
 					}
 					tp.AddChild (Identifier.Create (arg.Name, Convert (arg.Location)), Roles.Identifier);
 					parent.AddChild (tp, Roles.TypeParameter);
@@ -2792,8 +2802,8 @@ namespace ICSharpCode.NRefactory.CSharp
 					}
 					if (commaLoc != null && curComma < commaLoc.Count)
 						init.AddChild(new CSharpTokenNode(Convert(commaLoc [curComma++])), Roles.Comma);
-
 				}
+
 				if (initLoc != null) {
 					if (initLoc.Count == 3) // optional comma
 						init.AddChild(new CSharpTokenNode(Convert(initLoc [1])), Roles.Comma);
@@ -2877,9 +2887,11 @@ namespace ICSharpCode.NRefactory.CSharp
 							initializer.AddChild (new CSharpTokenNode (Convert (commaLocations [i])), Roles.Comma);
 						}
 					}
-					
-					if (initLocation != null)
+					if (initLocation != null) {
+						if (initLocation.Count == 2) // optional comma
+							initializer.AddChild (new CSharpTokenNode(Convert(initLocation [0])), Roles.Comma);
 						initializer.AddChild (new CSharpTokenNode (Convert (initLocation [initLocation.Count - 1])), Roles.RBrace);
+					}
 					result.AddChild (initializer, ArrayCreateExpression.InitializerRole);
 				}
 				
@@ -3071,7 +3083,9 @@ namespace ICSharpCode.NRefactory.CSharp
 				result.Operator = AssignmentOperatorType.Assign;
 				if (simpleAssign.Target != null)
 					result.AddChild ((Expression)simpleAssign.Target.Accept (this), AssignmentExpression.LeftRole);
-				result.AddChild (new CSharpTokenNode (Convert (simpleAssign.Location)), AssignmentExpression.AssignRole);
+				var location = LocationsBag.GetLocations (simpleAssign);
+				if (location != null)
+					result.AddChild (new CSharpTokenNode (Convert (location[0])), AssignmentExpression.AssignRole);
 				if (simpleAssign.Source != null) {
 					result.AddChild ((Expression)simpleAssign.Source.Accept (this), AssignmentExpression.RightRole);
 				}
@@ -3082,41 +3096,43 @@ namespace ICSharpCode.NRefactory.CSharp
 			{
 				var result = new AssignmentExpression ();
 				switch (compoundAssign.Op) {
-				case Binary.Operator.Multiply:
-					result.Operator = AssignmentOperatorType.Multiply;
-					break;
-				case Binary.Operator.Division:
-					result.Operator = AssignmentOperatorType.Divide;
-					break;
-				case Binary.Operator.Modulus:
-					result.Operator = AssignmentOperatorType.Modulus;
-					break;
-				case Binary.Operator.Addition:
-					result.Operator = AssignmentOperatorType.Add;
-					break;
-				case Binary.Operator.Subtraction:
-					result.Operator = AssignmentOperatorType.Subtract;
-					break;
-				case Binary.Operator.LeftShift:
-					result.Operator = AssignmentOperatorType.ShiftLeft;
-					break;
-				case Binary.Operator.RightShift:
-					result.Operator = AssignmentOperatorType.ShiftRight;
-					break;
-				case Binary.Operator.BitwiseAnd:
-					result.Operator = AssignmentOperatorType.BitwiseAnd;
-					break;
-				case Binary.Operator.BitwiseOr:
-					result.Operator = AssignmentOperatorType.BitwiseOr;
-					break;
-				case Binary.Operator.ExclusiveOr:
-					result.Operator = AssignmentOperatorType.ExclusiveOr;
-					break;
+					case Binary.Operator.Multiply:
+						result.Operator = AssignmentOperatorType.Multiply;
+						break;
+					case Binary.Operator.Division:
+						result.Operator = AssignmentOperatorType.Divide;
+						break;
+					case Binary.Operator.Modulus:
+						result.Operator = AssignmentOperatorType.Modulus;
+						break;
+					case Binary.Operator.Addition:
+						result.Operator = AssignmentOperatorType.Add;
+						break;
+					case Binary.Operator.Subtraction:
+						result.Operator = AssignmentOperatorType.Subtract;
+						break;
+					case Binary.Operator.LeftShift:
+						result.Operator = AssignmentOperatorType.ShiftLeft;
+						break;
+					case Binary.Operator.RightShift:
+						result.Operator = AssignmentOperatorType.ShiftRight;
+						break;
+					case Binary.Operator.BitwiseAnd:
+						result.Operator = AssignmentOperatorType.BitwiseAnd;
+						break;
+					case Binary.Operator.BitwiseOr:
+						result.Operator = AssignmentOperatorType.BitwiseOr;
+						break;
+					case Binary.Operator.ExclusiveOr:
+						result.Operator = AssignmentOperatorType.ExclusiveOr;
+						break;
 				}
 				
 				if (compoundAssign.Target != null)
 					result.AddChild ((Expression)compoundAssign.Target.Accept (this), AssignmentExpression.LeftRole);
-				result.AddChild (new CSharpTokenNode (Convert (compoundAssign.Location)), AssignmentExpression.GetOperatorRole (result.Operator));
+				var location = LocationsBag.GetLocations (compoundAssign);
+				if (location != null)
+					result.AddChild (new CSharpTokenNode (Convert (location[0])), AssignmentExpression.GetOperatorRole (result.Operator));
 				if (compoundAssign.Source != null)
 					result.AddChild ((Expression)compoundAssign.Source.Accept (this), AssignmentExpression.RightRole);
 				return result;
@@ -3202,7 +3218,7 @@ namespace ICSharpCode.NRefactory.CSharp
 				
 				if (location != null) {
 					if (location.Count == 2) // optional comma
-						result.AddChild (new CSharpTokenNode (Convert (location [1])), Roles.Comma);
+						result.AddChild (new CSharpTokenNode (Convert (location [0])), Roles.Comma);
 					result.AddChild (new CSharpTokenNode (Convert (location [location.Count - 1])), Roles.RBrace);
 				}
 				return result;
@@ -3211,25 +3227,36 @@ namespace ICSharpCode.NRefactory.CSharp
 			#endregion
 			
 			#region LINQ expressions
+			QueryOrderClause currentQueryOrderClause;
+
 			public override object Visit (Mono.CSharp.Linq.QueryExpression queryExpression)
 			{
-				var result = new QueryExpression ();
-				
-				var currentClause = queryExpression.next;
-				
-				while (currentClause != null) {
-					QueryClause clause = (QueryClause)currentClause.Accept (this);
-					if (clause is QueryContinuationClause) {
-						// insert preceding query at beginning of QueryContinuationClause
-						clause.InsertChildAfter (null, result, QueryContinuationClause.PrecedingQueryRole);
-						// create a new QueryExpression for the remaining query
-						result = new QueryExpression ();
+				var oldQueryOrderClause = currentQueryOrderClause;
+				try {
+					currentQueryOrderClause = null;
+					var result = new QueryExpression ();
+					
+					var currentClause = queryExpression.next;
+					
+					while (currentClause != null) {
+						QueryClause clause = (QueryClause)currentClause.Accept (this);
+						if (clause is QueryContinuationClause) {
+							// insert preceding query at beginning of QueryContinuationClause
+							clause.InsertChildAfter (null, result, QueryContinuationClause.PrecedingQueryRole);
+							// create a new QueryExpression for the remaining query
+							result = new QueryExpression ();
+						}
+						if (clause != null) {
+							result.AddChild (clause, QueryExpression.ClauseRole);
+						}
+						currentClause = currentClause.next;
 					}
-					result.AddChild (clause, QueryExpression.ClauseRole);
-					currentClause = currentClause.next;
+					
+					return result;
 				}
-				
-				return result;
+				finally {
+					currentQueryOrderClause = oldQueryOrderClause;
+				}
 			}
 			
 			public override object Visit (Mono.CSharp.Linq.QueryStartClause queryStart)
@@ -3395,7 +3422,7 @@ namespace ICSharpCode.NRefactory.CSharp
 			
 			public override object Visit (Mono.CSharp.Linq.OrderByAscending orderByAscending)
 			{
-				var result = new QueryOrderClause ();
+				currentQueryOrderClause = new QueryOrderClause();
 				
 				var ordering = new QueryOrdering ();
 				if (orderByAscending.Expr != null)
@@ -3405,13 +3432,13 @@ namespace ICSharpCode.NRefactory.CSharp
 					ordering.Direction = QueryOrderingDirection.Ascending;
 					ordering.AddChild (new CSharpTokenNode (Convert (location [0])), QueryOrdering.AscendingKeywordRole);
 				}
-				result.AddChild (ordering, QueryOrderClause.OrderingRole);
-				return result;
+				currentQueryOrderClause.AddChild (ordering, QueryOrderClause.OrderingRole);
+				return currentQueryOrderClause;
 			}
 			
 			public override object Visit (Mono.CSharp.Linq.OrderByDescending orderByDescending)
 			{
-				var result = new QueryOrderClause ();
+				currentQueryOrderClause = new QueryOrderClause ();
 				
 				var ordering = new QueryOrdering ();
 				if (orderByDescending.Expr != null)
@@ -3421,14 +3448,12 @@ namespace ICSharpCode.NRefactory.CSharp
 					ordering.Direction = QueryOrderingDirection.Descending;
 					ordering.AddChild (new CSharpTokenNode (Convert (location [0])), QueryOrdering.DescendingKeywordRole);
 				}
-				result.AddChild (ordering, QueryOrderClause.OrderingRole);
-				return result;
+				currentQueryOrderClause.AddChild (ordering, QueryOrderClause.OrderingRole);
+				return currentQueryOrderClause;
 			}
 			
 			public override object Visit (Mono.CSharp.Linq.ThenByAscending thenByAscending)
 			{
-				var result = new QueryOrderClause ();
-				
 				var ordering = new QueryOrdering ();
 				if (thenByAscending.Expr != null)
 					ordering.AddChild ((Expression)thenByAscending.Expr.Accept (this), Roles.Expression);
@@ -3437,14 +3462,12 @@ namespace ICSharpCode.NRefactory.CSharp
 					ordering.Direction = QueryOrderingDirection.Ascending;
 					ordering.AddChild (new CSharpTokenNode (Convert (location [0])), QueryOrdering.AscendingKeywordRole);
 				}
-				result.AddChild (ordering, QueryOrderClause.OrderingRole);
-				return result;
+				currentQueryOrderClause.AddChild (ordering, QueryOrderClause.OrderingRole);
+				return null;
 			}
 			
 			public override object Visit (Mono.CSharp.Linq.ThenByDescending thenByDescending)
 			{
-				var result = new QueryOrderClause ();
-				
 				var ordering = new QueryOrdering ();
 				if (thenByDescending.Expr != null)
 					ordering.AddChild ((Expression)thenByDescending.Expr.Accept (this), Roles.Expression);
@@ -3453,8 +3476,8 @@ namespace ICSharpCode.NRefactory.CSharp
 					ordering.Direction = QueryOrderingDirection.Descending;
 					ordering.AddChild (new CSharpTokenNode (Convert (location [0])), QueryOrdering.DescendingKeywordRole);
 				}
-				result.AddChild (ordering, QueryOrderClause.OrderingRole);
-				return result;
+				currentQueryOrderClause.AddChild (ordering, QueryOrderClause.OrderingRole);
+				return null;
 			}
 			
 			public override object Visit (Await awaitExpr)
@@ -3467,17 +3490,83 @@ namespace ICSharpCode.NRefactory.CSharp
 				return result;
 			}
 			#endregion
+			
+			#region XmlDoc
+			public DocumentationReference ConvertXmlDoc(DocumentationBuilder doc)
+			{
+				DocumentationReference result = new DocumentationReference();
+				if (doc.ParsedName != null) {
+					if (doc.ParsedName.Name == "<this>") {
+						result.EntityType = EntityType.Indexer;
+					} else {
+						result.MemberName = doc.ParsedName.Name;
+					}
+					if (doc.ParsedName.Left != null) {
+						result.DeclaringType = ConvertToType(doc.ParsedName.Left);
+					} else if (doc.ParsedBuiltinType != null) {
+						result.DeclaringType = ConvertToType(doc.ParsedBuiltinType);
+					}
+					if (doc.ParsedName.TypeParameters != null) {
+						for (int i = 0; i < doc.ParsedName.TypeParameters.Count; i++) {
+							result.TypeArguments.Add(ConvertToType(doc.ParsedName.TypeParameters[i]));
+						}
+					}
+				} else if (doc.ParsedBuiltinType != null) {
+					result.EntityType = EntityType.TypeDefinition;
+					result.DeclaringType = ConvertToType(doc.ParsedBuiltinType);
+				}
+				if (doc.ParsedParameters != null) {
+					result.HasParameterList = true;
+					result.Parameters.AddRange(doc.ParsedParameters.Select(ConvertXmlDocParameter));
+				}
+				if (doc.ParsedOperator != null) {
+					result.EntityType = EntityType.Operator;
+					result.OperatorType = (OperatorType)doc.ParsedOperator;
+					if (result.OperatorType == OperatorType.Implicit || result.OperatorType == OperatorType.Explicit) {
+						var returnTypeParam = result.Parameters.LastOrNullObject();
+						returnTypeParam.Remove(); // detach from parameter list
+						var returnType = returnTypeParam.Type;
+						returnType.Remove();
+						result.ConversionOperatorReturnType = returnType;
+					}
+					if (result.Parameters.Count == 0) {
+						// reset HasParameterList if necessary
+						result.HasParameterList = false;
+					}
+				}
+				return result;
+			}
+			
+			ParameterDeclaration ConvertXmlDocParameter(DocumentationParameter p)
+			{
+				ParameterDeclaration result = new ParameterDeclaration();
+				switch (p.Modifier) {
+					case Parameter.Modifier.OUT:
+						result.ParameterModifier = ParameterModifier.Out;
+						break;
+					case Parameter.Modifier.REF:
+						result.ParameterModifier = ParameterModifier.Ref;
+						break;
+					case Parameter.Modifier.PARAMS:
+						result.ParameterModifier = ParameterModifier.Params;
+						break;
+				}
+				if (p.Type != null) {
+					result.Type = ConvertToType(p.Type);
+				}
+				return result;
+			}
+			#endregion
 		}
 		
 		public CSharpParser ()
 		{
-			CompilerSettings = new CompilerSettings ();
-			CompilerSettings.Unsafe = true;
+			compilerSettings = new CompilerSettings();
 		}
 		
 		public CSharpParser (CompilerSettings args)
 		{
-			CompilerSettings = args;
+			compilerSettings = args ?? new CompilerSettings();
 		}
 		
 		static AstNode GetOuterLeft (AstNode node)
@@ -3633,28 +3722,34 @@ namespace ICSharpCode.NRefactory.CSharp
 			get { return errorReportPrinter.Errors; }
 		}
 		
-		public CompilationUnit Parse (ITextSource textSource, string fileName, int lineModifier = 0)
+		/// <summary>
+		/// Parses a C# code file.
+		/// </summary>
+		/// <param name="program">The source code to parse.</param>
+		/// <param name="fileName">The file name. Used to identify the file (e.g. when building a type system).
+		/// This can be an arbitrary identifier, NRefactory never tries to access the file on disk.</param>
+		/// <returns>Returns the syntax tree.</returns>
+		public SyntaxTree Parse (string program, string fileName = "")
 		{
-			return Parse (textSource.CreateReader (), fileName, lineModifier);
+			return Parse (new StringTextSource (program), fileName);
 		}
 		
-		public CompilationUnit Parse (TextReader reader, string fileName, int lineModifier = 0)
+		/// <summary>
+		/// Parses a C# code file.
+		/// </summary>
+		/// <param name="reader">The text reader containing the source code to parse.</param>
+		/// <param name="fileName">The file name. Used to identify the file (e.g. when building a type system).
+		/// This can be an arbitrary identifier, NRefactory never tries to access the file on disk.</param>
+		/// <returns>Returns the syntax tree.</returns>
+		public SyntaxTree Parse (TextReader reader, string fileName = "")
 		{
-			// TODO: can we optimize this to avoid the text->stream->text roundtrip?
-			using (MemoryStream stream = new MemoryStream ()) {
-				StreamWriter w = new StreamWriter (stream, Encoding.UTF8);
-				char[] buffer = new char[2048];
-				int read;
-				while ((read = reader.ReadBlock(buffer, 0, buffer.Length)) > 0)
-					w.Write (buffer, 0, read);
-				w.Flush (); // we can't close the StreamWriter because that would also close the MemoryStream
-				stream.Position = 0;
-				
-				return Parse (stream, fileName, lineModifier);
-			}
+			return Parse(new StringTextSource (reader.ReadToEnd ()), fileName);
 		}
 
-		public CompilationUnit Parse(CompilerCompilationUnit top, string fileName, int lineModifier = 0)
+		/// <summary>
+		/// Converts a Mono.CSharp syntax tree into an NRefactory syntax tree.
+		/// </summary>
+		public SyntaxTree Parse(CompilerCompilationUnit top, string fileName)
 		{
 			if (top == null) {
 				return null;
@@ -3668,116 +3763,227 @@ namespace ICSharpCode.NRefactory.CSharp
 			if (top.LastYYValue is Mono.CSharp.Expression) {
 				conversionVisitor.Unit.TopExpression = ((Mono.CSharp.Expression)top.LastYYValue).Accept(conversionVisitor) as AstNode;
 			}
+
 			conversionVisitor.Unit.FileName = fileName;
+			conversionVisitor.Unit.ConditionalSymbols = top.Conditionals.Concat (compilerSettings.ConditionalSymbols).ToArray ();
 			return conversionVisitor.Unit;
 		}
 		
 		public CompilerSettings CompilerSettings {
-			get;
-			internal set;
+			get { return compilerSettings; }
+			set {
+				if (value == null)
+					throw new ArgumentNullException();
+				compilerSettings = value;
+			}
 		}
 		
+		/// <summary>
+		/// Callback that gets called with the Mono.CSharp syntax tree whenever some code is parsed.
+		/// </summary>
 		public Action<CompilerCompilationUnit> CompilationUnitCallback {
 			get;
 			set;
 		}
 		
+		/// <summary>
+		/// Specifies whether to run the parser in a special mode for generating the type system.
+		/// If this property is true, the syntax tree will only contain nodes relevant for the
+		/// <see cref="SyntaxTree.ToTypeSystem()"/> call and might be missing other nodes (e.g. method bodies).
+		/// The default is false.
+		/// </summary>
 		public bool GenerateTypeSystemMode {
 			get;
 			set;
 		}
 		
-		public CompilationUnit Parse (string program, string fileName)
-		{
-			return Parse (new StringReader (program), fileName);
+		TextLocation initialLocation = new TextLocation(1, 1);
+		
+		/// <summary>
+		/// Specifies the text location where parsing starts.
+		/// This property can be used when parsing a part of a file to make the locations of the AstNodes
+		/// refer to the position in the whole file.
+		/// The default is (1,1).
+		/// </summary>
+		public TextLocation InitialLocation {
+			get { return initialLocation; }
+			set { initialLocation = value; }
 		}
 		
 		internal static object parseLock = new object ();
 		
-		public CompilationUnit Parse(Stream stream, string fileName, int lineModifier = 0)
+		/// <summary>
+		/// Parses a C# code file.
+		/// </summary>
+		/// <param name="stream">The stream containing the source code to parse.</param>
+		/// <param name="fileName">The file name. Used to identify the file (e.g. when building a type system).
+		/// This can be an arbitrary identifier, NRefactory never tries to access the file on disk.</param>
+		/// <returns>Returns the syntax tree.</returns>
+		public SyntaxTree Parse (Stream stream, string fileName = "")
+		{
+			return Parse (new StreamReader (stream), fileName);
+		}
+		
+		/// <summary>
+		/// Parses a C# code file.
+		/// </summary>
+		/// <param name="program">The source code to parse.</param>
+		/// <param name="fileName">The file name. Used to identify the file (e.g. when building a type system).
+		/// This can be an arbitrary identifier, NRefactory never tries to access the file on disk.</param>
+		///  </param>
+		/// <returns>Returns the syntax tree.</returns>
+		public SyntaxTree Parse(ITextSource program, string fileName = "")
+		{
+			return Parse(program, fileName, initialLocation.Line, initialLocation.Column);
+		}
+		
+		SyntaxTree Parse(ITextSource program, string fileName, int initialLine, int initialColumn)
 		{
 			lock (parseLock) {
 				errorReportPrinter = new ErrorReportPrinter ("");
-				var ctx = new CompilerContext (CompilerSettings, errorReportPrinter);
+				var ctx = new CompilerContext (compilerSettings.ToMono(), errorReportPrinter);
 				ctx.Settings.TabSize = 1;
-				var reader = new SeekableStreamReader (stream, Encoding.UTF8);
+				var reader = new SeekableStreamReader (program);
 				var file = new SourceFile (fileName, fileName, 0);
 				Location.Initialize (new List<SourceFile> (new [] { file }));
 				var module = new ModuleContainer (ctx);
-				var parser = Driver.Parse (reader, file, module, lineModifier);
-				
+				var session = new ParserSession ();
+				session.LocationsBag = new LocationsBag ();
+				var report = new Report (ctx, errorReportPrinter);
+				var parser = Driver.Parse (reader, file, module, session, report, initialLine - 1, initialColumn - 1);
 				var top = new CompilerCompilationUnit () {
 					ModuleCompiled = module,
-					LocationsBag = parser.LocationsBag,
-					SpecialsBag = parser.Lexer.sbag
+					LocationsBag = session.LocationsBag,
+					SpecialsBag = parser.Lexer.sbag,
+					Conditionals = parser.Lexer.SourceFile.Conditionals
 				};
-				var unit = Parse (top, fileName, lineModifier);
+				var unit = Parse (top, fileName);
 				unit.Errors.AddRange (errorReportPrinter.Errors);
 				CompilerCallableEntryPoint.Reset ();
 				return unit;
 			}
 		}
 
-		public IEnumerable<EntityDeclaration> ParseTypeMembers (TextReader reader, int lineModifier = 0)
+		public IEnumerable<EntityDeclaration> ParseTypeMembers (string code)
 		{
-			string code = "unsafe partial class MyClass { " + Environment.NewLine + reader.ReadToEnd () + "}";
-			var cu = Parse (new StringReader (code), "parsed.cs", lineModifier - 1);
-			if (cu == null)
+			return ParseTypeMembers(code, initialLocation.Line, initialLocation.Column);
+		}
+		
+		IEnumerable<EntityDeclaration> ParseTypeMembers (string code, int initialLine, int initialColumn)
+		{
+			const string prefix = "unsafe partial class MyClass { ";
+			var syntaxTree = Parse (new StringTextSource (prefix + code + "}"), "parsed.cs", initialLine, initialColumn - prefix.Length);
+			if (syntaxTree == null)
 				return Enumerable.Empty<EntityDeclaration> ();
-			var td = cu.Children.FirstOrDefault () as TypeDeclaration;
-			if (td != null)
-				return td.Members;
+			var td = syntaxTree.FirstChild as TypeDeclaration;
+			if (td != null) {
+				var members = td.Members.ToArray();
+				// detach members from parent
+				foreach (var m in members)
+					m.Remove();
+				return members;
+			}
 			return Enumerable.Empty<EntityDeclaration> ();
 		}
 		
-		public IEnumerable<Statement> ParseStatements (TextReader reader, int lineModifier = 0)
+		public IEnumerable<Statement> ParseStatements (string code)
 		{
-			string code = "void M() { " + Environment.NewLine + reader.ReadToEnd () + "}";
-			var members = ParseTypeMembers (new StringReader (code), lineModifier - 1);
+			return ParseStatements(code, initialLocation.Line, initialLocation.Column);
+		}
+		
+		IEnumerable<Statement> ParseStatements (string code, int initialLine, int initialColumn)
+		{
+			// the dummy method is async so that 'await' expressions are parsed as expected
+			const string prefix = "async void M() { ";
+			var members = ParseTypeMembers (prefix + code + "}", initialLine, initialColumn - prefix.Length);
 			var method = members.FirstOrDefault () as MethodDeclaration;
-			if (method != null && method.Body != null)
-				return method.Body.Statements;
+			if (method != null && method.Body != null) {
+				var statements = method.Body.Statements.ToArray();
+				// detach statements from parent
+				foreach (var st in statements)
+					st.Remove();
+				return statements;
+			}
 			return Enumerable.Empty<Statement> ();
 		}
 		
-		public AstType ParseTypeReference (TextReader reader)
+		public AstType ParseTypeReference (string code)
 		{
-			string code = reader.ReadToEnd () + " a;";
-			var members = ParseTypeMembers (new StringReader (code));
+			var members = ParseTypeMembers (code + " a;");
 			var field = members.FirstOrDefault () as FieldDeclaration;
-			if (field != null)
-				return field.ReturnType;
+			if (field != null) {
+				AstType type = field.ReturnType;
+				type.Remove();
+				return type;
+			}
 			return AstType.Null;
 		}
 		
-		public Expression ParseExpression (TextReader reader)
+		public Expression ParseExpression (string code)
 		{
-			var es = ParseStatements (new StringReader ("tmp = " + Environment.NewLine + reader.ReadToEnd () + ";"), -1).FirstOrDefault () as ExpressionStatement;
+			const string prefix = "tmp = ";
+			var statements = ParseStatements (prefix + code + ";", initialLocation.Line, initialLocation.Column - prefix.Length);
+			var es = statements.FirstOrDefault () as ExpressionStatement;
 			if (es != null) {
 				AssignmentExpression ae = es.Expression as AssignmentExpression;
-				if (ae != null)
-					return ae.Right;
+				if (ae != null) {
+					Expression expr = ae.Right;
+					expr.Remove();
+					return expr;
+				}
 			}
 			return Expression.Null;
 		}
 		
+		/*
 		/// <summary>
-		/// Parses a file snippet; guessing what the code snippet represents (compilation unit, type members, block, type reference, expression).
+		/// Parses a file snippet; guessing what the code snippet represents (whole file, type members, block, type reference, expression).
 		/// </summary>
-		public AstNode ParseSnippet (TextReader reader)
+		public AstNode ParseSnippet (string code)
 		{
 			// TODO: add support for parsing a part of a file
 			throw new NotImplementedException ();
 		}
+		*/
 		
 		public DocumentationReference ParseDocumentationReference (string cref)
 		{
+			// see Mono.CSharp.DocumentationBuilder.HandleXrefCommon
 			if (cref == null)
 				throw new ArgumentNullException ("cref");
+			
+			// Additional symbols for < and > are allowed for easier XML typing
 			cref = cref.Replace ('{', '<').Replace ('}', '>');
-			// TODO: add support for parsing cref attributes
-			// (documentation_parsing production, see DocumentationBuilder.HandleXrefCommon)
-			throw new NotImplementedException ();
+			
+			lock (parseLock) {
+				errorReportPrinter = new ErrorReportPrinter("");
+				var ctx = new CompilerContext(compilerSettings.ToMono(), errorReportPrinter);
+				ctx.Settings.TabSize = 1;
+				var reader = new SeekableStreamReader(new StringTextSource (cref));
+				var file = new SourceFile("", "", 0);
+				Location.Initialize(new List<SourceFile> (new [] { file }));
+				var module = new ModuleContainer(ctx);
+				module.DocumentationBuilder = new DocumentationBuilder(module);
+				var source_file = new CompilationSourceFile (module);
+				var report = new Report (ctx, errorReportPrinter);
+				ParserSession session = new ParserSession ();
+				session.LocationsBag = new LocationsBag ();
+				var parser = new Mono.CSharp.CSharpParser (reader, source_file, report, session);
+				parser.Lexer.Line += initialLocation.Line - 1;
+				parser.Lexer.Column += initialLocation.Column - 1;
+				parser.Lexer.putback_char = Tokenizer.DocumentationXref;
+				parser.Lexer.parsing_generic_declaration_doc = true;
+				parser.parse ();
+				if (report.Errors > 0) {
+//					Report.Warning (1584, 1, mc.Location, "XML comment on `{0}' has syntactically incorrect cref attribute `{1}'",
+//					                mc.GetSignatureForError (), cref);
+				}
+				
+				ConversionVisitor conversionVisitor = new ConversionVisitor (false, session.LocationsBag);
+				DocumentationReference docRef = conversionVisitor.ConvertXmlDoc(module.DocumentationBuilder);
+				CompilerCallableEntryPoint.Reset();
+				return docRef;
+			}
 		}
 	}
 }

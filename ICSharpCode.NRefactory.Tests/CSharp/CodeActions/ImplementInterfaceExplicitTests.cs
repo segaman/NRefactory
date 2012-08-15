@@ -1,4 +1,4 @@
-// 
+﻿// 
 // ImplementInterfaceExplicitTests.cs
 //  
 // Author:
@@ -29,7 +29,6 @@ using ICSharpCode.NRefactory.CSharp.Refactoring;
 
 namespace ICSharpCode.NRefactory.CSharp.CodeActions
 {
-	[Ignore("TODO")]
 	[TestFixture]
 	public class ImplementInterfaceExplicitTests : ContextActionTestBase
 	{
@@ -44,9 +43,36 @@ class Foo : $IDisposable
 class Foo : IDisposable
 {
 	#region IDisposable implementation
-	void IDisposable.Dispose()
+	void IDisposable.Dispose ()
 	{
-		throw new NotImplementedException();
+		throw new NotImplementedException ();
+	}
+	#endregion
+}
+");
+		}
+		
+		[Test]
+		public void NestedInterfaceInGenericClass()
+		{
+			Test<ImplementInterfaceExplicitAction>(@"using System;
+class TestClass<T> {
+	public interface INestedInterface { T Prop { get; } }
+}
+class TargetClass : TestClass<string>.$INestedInterface
+{
+}
+", @"using System;
+class TestClass<T> {
+	public interface INestedInterface { T Prop { get; } }
+}
+class TargetClass : TestClass<string>.INestedInterface
+{
+	#region INestedInterface implementation
+	string TestClass<string>.INestedInterface.Prop {
+		get {
+			throw new NotImplementedException ();
+		}
 	}
 	#endregion
 }

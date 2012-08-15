@@ -18,7 +18,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using ICSharpCode.NRefactory.Documentation;
 using ICSharpCode.NRefactory.Utils;
@@ -131,7 +130,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 					result = (
 						from part in parts
 						from nestedTypeRef in part.NestedTypes
-						group nestedTypeRef by nestedTypeRef.Name into g
+						group nestedTypeRef by new { nestedTypeRef.Name, nestedTypeRef.TypeParameters.Count } into g
 						select new DefaultResolvedTypeDefinition(new SimpleTypeResolveContext(this), g.ToArray())
 					).ToList<ITypeDefinition>().AsReadOnly();
 					return LazyInit.GetOrSet(ref this.nestedTypes, result);
@@ -322,10 +321,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 					}
 				}
 				
-				DefaultUnresolvedTypeDefinition dutd = part as DefaultUnresolvedTypeDefinition;
-				if (dutd != null) {
-					addDefaultConstructorIfRequired |= dutd.AddDefaultConstructorIfRequired;
-				}
+				addDefaultConstructorIfRequired |= part.AddDefaultConstructorIfRequired;
 			}
 			if (addDefaultConstructorIfRequired) {
 				TypeKind kind = this.Kind;
@@ -593,7 +589,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		public virtual DocumentationComment Documentation {
 			get {
 				foreach (var part in parts) {
-					var unresolvedProvider = part.ParsedFile as IUnresolvedDocumentationProvider;
+					var unresolvedProvider = part.UnresolvedFile as IUnresolvedDocumentationProvider;
 					if (unresolvedProvider != null) {
 						var doc = unresolvedProvider.GetDocumentation(part, this);
 						if (doc != null)
@@ -829,6 +825,78 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			} else {
 				return GetMembersHelper.GetMembers(this, filter, options);
 			}
+		}
+		
+		public virtual IEnumerable<IMethod> GetAccessors(Predicate<IUnresolvedMethod> filter = null, GetMemberOptions options = GetMemberOptions.None)
+		{
+			if ((options & GetMemberOptions.IgnoreInheritedMembers) == GetMemberOptions.IgnoreInheritedMembers) {
+				return GetFilteredAccessors(filter);
+			} else {
+				return GetMembersHelper.GetAccessors(this, filter, options);
+			}
+		}
+		
+		IEnumerable<IMethod> GetFilteredAccessors(Predicate<IUnresolvedMethod> filter)
+		{
+			var members = GetMemberList();
+			for (int i = 0; i < members.unresolvedMembers.Length; i++) {
+				IUnresolvedMember unresolved = members.unresolvedMembers[i];
+				var unresolvedProperty = unresolved as IUnresolvedProperty;
+				var unresolvedEvent = unresolved as IUnresolvedEvent;
+				if (unresolvedProperty != null) {
+					if (unresolvedProperty.CanGet && (filter == null || filter(unresolvedProperty.Getter)))
+						yield return ((IProperty)members[i]).Getter;
+					if (unresolvedProperty.CanSet && (filter == null || filter(unresolvedProperty.Setter)))
+						yield return ((IProperty)members[i]).Setter;
+				} else if (unresolvedEvent != null) {
+					if (unresolvedEvent.CanAdd && (filter == null || filter(unresolvedEvent.AddAccessor)))
+						yield return ((IEvent)members[i]).AddAccessor;
+					if (unresolvedEvent.CanRemove && (filter == null || filter(unresolvedEvent.RemoveAccessor)))
+						yield return ((IEvent)members[i]).RemoveAccessor;
+					if (unresolvedEvent.CanInvoke && (filter == null || filter(unresolvedEvent.InvokeAccessor)))
+						yield return ((IEvent)members[i]).InvokeAccessor;
+				}
+			}
+		}
+		#endregion
+		
+		#region GetInterfaceImplementation
+		public IMember GetInterfaceImplementation(IMember interfaceMember)
+		{
+			return GetInterfaceImplementation(new[] { interfaceMember })[0];
+		}
+		
+		public IList<IMember> GetInterfaceImplementation(IList<IMember> interfaceMembers)
+		{
+			// TODO: review the subtle rules for interface reimplementation,
+			// write tests and fix this method.
+			// Also virtual/override is going to be tricky -
+			// I think we'll need to consider the 'virtual' method first for
+			// reimplemenatation purposes, but then actually return the 'override'
+			// (as that's the method that ends up getting called)
+			
+			interfaceMembers = interfaceMembers.ToList(); // avoid evaluating more than once
+			
+			var result = new IMember[interfaceMembers.Count];
+			var signatureToIndexDict = new MultiDictionary<IMember, int>(SignatureComparer.Ordinal);
+			for (int i = 0; i < interfaceMembers.Count; i++) {
+				signatureToIndexDict.Add(interfaceMembers[i], i);
+			}
+			foreach (var member in GetMembers(m => !m.IsExplicitInterfaceImplementation)) {
+				foreach (int interfaceMemberIndex in signatureToIndexDict[member]) {
+					result[interfaceMemberIndex] = member;
+				}
+			}
+			foreach (var explicitImpl in GetMembers(m => m.IsExplicitInterfaceImplementation)) {
+				foreach (var interfaceMember in explicitImpl.ImplementedInterfaceMembers) {
+					foreach (int potentialMatchingIndex in signatureToIndexDict[interfaceMember]) {
+						if (interfaceMember.Equals(interfaceMembers[potentialMatchingIndex])) {
+							result[potentialMatchingIndex] = explicitImpl;
+						}
+					}
+				}
+			}
+			return result;
 		}
 		#endregion
 		

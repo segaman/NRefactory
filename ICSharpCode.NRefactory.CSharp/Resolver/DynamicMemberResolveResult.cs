@@ -17,32 +17,41 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using ICSharpCode.NRefactory.Semantics;
+using ICSharpCode.NRefactory.TypeSystem;
 
-namespace ICSharpCode.NRefactory.TypeSystem.Implementation
+namespace ICSharpCode.NRefactory.CSharp.Resolver
 {
 	/// <summary>
-	/// Default implementation of ISolutionSnapshot.
+	/// Represents the result of an access to a member of a dynamic object.
 	/// </summary>
-	public class DefaultSolutionSnapshot : ISolutionSnapshot
+	public class DynamicMemberResolveResult : ResolveResult
 	{
-		ConcurrentDictionary<IProjectContent, ICompilation> dictionary = new ConcurrentDictionary<IProjectContent, ICompilation>();
-		
-		public ICompilation GetCompilation(IProjectContent project)
-		{
-			if (project == null)
-				throw new ArgumentNullException("project");
-			return dictionary.GetOrAdd(project, p => p.CreateCompilation(this));
+		/// <summary>
+		/// Target of the member access (a dynamic object).
+		/// </summary>
+		public readonly ResolveResult Target;
+
+		/// <summary>
+		/// Name of the accessed member.
+		/// </summary>
+		public readonly string Member;
+
+		public DynamicMemberResolveResult(ResolveResult target, string member) : base(SpecialType.Dynamic) {
+			this.Target = target;
+			this.Member = member;
 		}
-		
-		public void AddCompilation(IProjectContent project, ICompilation compilation)
+
+		public override string ToString()
 		{
-			if (project == null)
-				throw new ArgumentNullException("project");
-			if (compilation == null)
-				throw new ArgumentNullException("compilation");
-			if (!dictionary.TryAdd(project, compilation))
-				throw new InvalidOperationException();
+			return string.Format(CultureInfo.InvariantCulture, "[Dynamic member '{0}']", Member);
+		}
+
+		public override IEnumerable<ResolveResult> GetChildResults() {
+			return new[] { Target };
 		}
 	}
 }
