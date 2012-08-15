@@ -178,7 +178,8 @@ namespace ICSharpCode.NRefactory.Demo
 		
 		Lazy<IList<IUnresolvedAssembly>> builtInLibs = new Lazy<IList<IUnresolvedAssembly>>(
 			delegate {
-				Assembly[] assemblies = {
+				Assembly[] assemblies = new Assembly[]
+				{
 					typeof(object).Assembly, // mscorlib
 					typeof(Uri).Assembly, // System.dll
 					typeof(System.Linq.Enumerable).Assembly, // System.Core.dll
