@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -17,6 +17,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System;
+using System.Linq;
 using ICSharpCode.NRefactory.Semantics;
 using ICSharpCode.NRefactory.TypeSystem;
 using NUnit.Framework;
@@ -46,6 +47,19 @@ public class Test : Dummy {
 			Assert.IsFalse(rr.IsError);
 			Assert.AreEqual("Dummy", rr.Type.ReflectionName);
 			Assert.AreEqual(1, rr.Member.Parameters.Count);
+		}
+		
+		[Test]
+		public void CyclicCoClass()
+		{
+			string program = @"using System;
+using System.Runtime.InteropServices;
+
+[ComImport, Guid(""698D8281-3890-41A6-8A2F-DBC29CBAB8BC""), CoClass(typeof(Dummy))]
+public interface $Dummy { }";
+			
+			var trr = ResolveAtLocation<TypeResolveResult>(program);
+			Assert.AreEqual(0, trr.Type.GetConstructors().Count());
 		}
 	}
 }

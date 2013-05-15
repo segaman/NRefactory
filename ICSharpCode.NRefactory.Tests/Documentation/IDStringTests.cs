@@ -1,4 +1,4 @@
-// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -59,7 +59,7 @@ namespace ICSharpCode.NRefactory.Documentation
 		
 		ITypeDefinition GetTypeDefinition(string nameSpace, string name, int typeParameterCount = 0)
 		{
-			return compilation.MainAssembly.GetTypeDefinition(nameSpace, name, typeParameterCount);
+			return compilation.MainAssembly.GetTypeDefinition(new TopLevelTypeName(nameSpace, name, typeParameterCount));
 		}
 		
 		[Test]

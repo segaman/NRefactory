@@ -42,7 +42,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 	[TestFixture()]
 	public class ParameterCompletionTests : TestBase
 	{
-		class TestFactory : IParameterCompletionDataFactory
+		internal class TestFactory : IParameterCompletionDataFactory
 		{
 			IProjectContent ctx;
 			
@@ -68,6 +68,11 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				}
 
 				public string GetParameterDescription (int overload, int paramIndex)
+				{
+					return "";
+				}
+
+				public string GetParameterName(int overload, int currentParameter)
 				{
 					return "";
 				}
@@ -109,6 +114,11 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				}
 
 				public string GetParameterDescription (int overload, int paramIndex)
+				{
+					return "";
+				}
+
+				public string GetParameterName(int overload, int currentParameter)
 				{
 					return "";
 				}
@@ -157,6 +167,10 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				{
 					return 1;
 				}
+				public string GetParameterName(int overload, int currentParameter)
+				{
+					return "";
+				}
 
 				public bool AllowParameterList (int overload)
 				{
@@ -176,33 +190,83 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				public IEnumerable<IType> Data { get; set; }
 				#region IParameterDataProvider implementation
 				public int StartOffset { get { return 0; } }
-
+				
 				public string GetHeading (int overload, string[] parameterDescription, int currentParameter)
 				{
 					return "";
 				}
-
+				
 				public string GetDescription (int overload, int currentParameter)
 				{
 					return "";
 				}
-
+				
 				public string GetParameterDescription (int overload, int paramIndex)
 				{
 					return "";
 				}
-
+				
+				public string GetParameterName(int overload, int currentParameter)
+				{
+					return "";
+				}
+				
 				public int GetParameterCount (int overload)
 				{
 					var data = Data.ElementAt (overload);
 					return data.TypeParameterCount;
 				}
-
+				
 				public bool AllowParameterList (int overload)
 				{
 					return false;
 				}
+				
+				public int Count {
+					get {
+						return Data.Count ();
+					}
+				}
+				#endregion
+			}
 
+			class MethodTypeParameterDataProvider : IParameterDataProvider
+			{
+				public IEnumerable<IMethod> Data { get; set; }
+				#region IParameterDataProvider implementation
+				public int StartOffset { get { return 0; } }
+				
+				public string GetHeading (int overload, string[] parameterDescription, int currentParameter)
+				{
+					return "";
+				}
+				
+				public string GetDescription (int overload, int currentParameter)
+				{
+					return "";
+				}
+				
+				public string GetParameterDescription (int overload, int paramIndex)
+				{
+					return "";
+				}
+				
+				public string GetParameterName(int overload, int currentParameter)
+				{
+					return "";
+				}
+				
+				public int GetParameterCount (int overload)
+				{
+					var data = Data.ElementAt (overload);
+					return data.TypeArguments.Count;
+				}
+				
+				public bool AllowParameterList (int overload)
+				{
+					return false;
+				}
+				
 				public int Count {
 					get {
 						return Data.Count ();
@@ -213,6 +277,14 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 			
 			#region IParameterCompletionDataFactory implementation
 			public IParameterDataProvider CreateConstructorProvider(int startOffset, ICSharpCode.NRefactory.TypeSystem.IType type)
+			{
+				Assert.IsTrue(type.Kind != TypeKind.Unknown);
+				return new Provider () {
+					Data = type.GetConstructors (m => m.Accessibility == Accessibility.Public)
+				};
+			}
+
+			public IParameterDataProvider CreateConstructorProvider(int startOffset, ICSharpCode.NRefactory.TypeSystem.IType type, AstNode skipNode)
 			{
 				Assert.IsTrue(type.Kind != TypeKind.Unknown);
 				return new Provider () {
@@ -235,13 +307,13 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				};
 			}
 			
-			public IParameterDataProvider CreateIndexerParameterDataProvider(int startOffset, IType type, AstNode resolvedNode)
+			public IParameterDataProvider CreateIndexerParameterDataProvider(int startOffset, IType type, IEnumerable<IProperty> accessibleIndexers, AstNode resolvedNode)
 			{
 				Assert.IsTrue(type.Kind != TypeKind.Unknown);
 				if (type.Kind == TypeKind.Array)
 					return new ArrayProvider ();
 				return new IndexerProvider () {
-					Data = type.GetProperties (p => p.IsIndexer)
+					Data = accessibleIndexers
 				};
 			}
 			
@@ -249,6 +321,13 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 			{
 				return new TypeParameterDataProvider () {
 					Data = types
+				};
+			}
+
+			public IParameterDataProvider CreateTypeParameterDataProvider (int startOffset, IEnumerable<IMethod> methods)
+			{
+				return new MethodTypeParameterDataProvider () {
+					Data = methods
 				};
 			}
 			#endregion
@@ -268,7 +347,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 				cursorPosition = endPos - 1; 
 			}
 			var doc = new ReadOnlyDocument(editorText);
-			
+
 			IProjectContent pctx = new CSharpProjectContent();
 			pctx = pctx.AddAssemblyReferences(new [] { CecilLoaderTests.Mscorlib, CecilLoaderTests.SystemCore });
 			
@@ -975,6 +1054,178 @@ public class B
 }
 ");
 			Assert.IsNotNull (provider, "provider was not created.");
+			Assert.AreEqual (1, provider.Count);
+		}
+
+
+		[Test()]
+		public void TestLambdaCase()
+		{
+			IParameterDataProvider provider = CreateProvider(
+				@"using System;
+class TestClass
+{    
+	void F (Action i, int foo)
+	{
+		$F (()=> Something(),$
+
+	}
+}
+");
+			Assert.IsTrue (provider != null && provider.Count == 1);
+		}
+
+		[Test()]
+		public void TestJaggedArrayCreation()
+		{
+			IParameterDataProvider provider = CreateProvider(
+				@"using System;
+class TestClass
+{    
+	void F (Action i, int foo)
+	{
+		$new foo[1,2][$
+
+	}
+}
+");
+			Assert.IsTrue (provider == null || provider.Count == 0);
+		}
+
+		[Test]
+		public void TestJaggedArrayCreationCase2()
+		{
+			IParameterDataProvider provider = CreateProvider(
+				@"using System;
+class TestClass
+{    
+	void F (Action i, int foo)
+	{
+		$new foo[1,2][1,$
+
+	}
+}
+");
+			Assert.IsTrue (provider == null || provider.Count == 0);
+		}
+
+		/// <summary>
+		/// Bug 9301 - Inaccessible indexer overload in completion 
+		/// </summary>
+		[Test]
+		public void TestBug9301()
+		{
+			IParameterDataProvider provider = CreateProvider(
+				@"using System;
+
+public class A
+{
+	public virtual int this [int i, string s] {
+		get {
+			return 1;
+		}
+	}
+}
+
+public class B : A
+{
+	public new bool this [int i, string s2] {
+		get {
+			return true;
+		}
+	}
+}
+
+public class Test
+{
+	public static int Main ()
+	{
+		B p = new B ();
+		$p[$
+		return 0;
+	}
+}
+");
+			Assert.AreEqual (1, provider.Count);
+		}
+
+		[Test]
+		public void TestBug9301Case2()
+		{
+			IParameterDataProvider provider = CreateProvider(
+				@"using System;
+
+public class A
+{
+	public virtual int Test (int i, string s) {
+		return 1;
+	}
+}
+
+public class B : A
+{
+	public new bool Test (int i, string s2) {
+		return true;
+	}
+}
+
+public class Test
+{
+	public static int Main ()
+	{
+		B p = new B ();
+		$p.Test($
+		return 0;
+	}
+}
+");
+			Assert.AreEqual (1, provider.Count);
+		}
+
+		[Test]
+		public void TestExtensionMethod()
+		{
+			var provider = CreateProvider(@"static class Ext { public static void Foo(this object o, string str) {} }
+class Test
+{
+	public static void Main (string[] args)
+	{
+		$args.Foo($
+	}
+}");
+			Assert.AreEqual (1, provider.Count);
+			Assert.AreEqual (1, provider.GetParameterCount (0));
+		}
+		
+		
+		[Test]
+		public void TestExtensionMethodStaticInvocation()
+		{
+			var provider = CreateProvider(@"static class Ext { public static void Foo(this object o, string str) {} }
+class Test
+{
+	public static void Main (string[] args)
+	{
+		$Ext.Foo($
+	}
+}");
+			Assert.AreEqual (1, provider.Count);
+			Assert.AreEqual (2, provider.GetParameterCount (0));
+		}
+
+		[Test]
+		public void TypeArgumentsInIncompleteMethodCall ()
+		{
+			var provider = CreateProvider (
+				@"using System.Collections.Generic;
+using System.Linq;
+class NUnitTestClass {
+    public ICollection<ITest> NestedTestCollection { get; set; }
+    public NUnitTestMethod FindTestMethodWithShortName(string name)
+    {
+        this.NestedTestCollection$.OfType<$.LastOrDefault(
+    }
+}");
 			Assert.AreEqual (1, provider.Count);
 		}
 	}

@@ -58,7 +58,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					state.CurrentTypeDefinition,
 					GenerateImplementation(context, toImplement)
 				);
-			});
+			}, type);
 		}
 		
 		public static IEnumerable<AstNode> GenerateImplementation(RefactoringContext context, IEnumerable<Tuple<IMember, bool>> toImplement)
@@ -93,6 +93,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			var builder = context.CreateTypeSytemAstBuilder();
 			builder.GenerateBody = true;
+			builder.ShowModifiers = false;
+			builder.ShowAccessibility = true;
 			builder.ShowConstantValues = !explicitImplementation;
 			builder.ShowTypeParameterConstraints = !explicitImplementation;
 			builder.UseCustomEvents = explicitImplementation;
@@ -100,8 +102,13 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			if (explicitImplementation) {
 				decl.Modifiers = Modifiers.None;
 				decl.AddChild(builder.ConvertType(member.DeclaringType), EntityDeclaration.PrivateImplementationTypeRole);
+			} else if (member.DeclaringType.Kind == TypeKind.Interface) {
+				decl.Modifiers |= Modifiers.Public;
 			} else {
-				decl.Modifiers = Modifiers.Public;
+				// Remove 'internal' modifier from 'protected internal' members if the override is in a different assembly than the member
+				if (!member.ParentAssembly.InternalsVisibleTo(context.Compilation.MainAssembly)) {
+					decl.Modifiers &= ~Modifiers.Internal;
+				}
 			}
 			return decl;
 		}
@@ -113,7 +120,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			bool alreadyImplemented;
 			
 			// Stub out non-implemented events defined by @iface
-			foreach (var evGroup in interfaceType.GetEvents (e => !e.IsSynthetic && e.DeclaringTypeDefinition.ReflectionName == def.ReflectionName).GroupBy (m => m.DeclaringType).Reverse ())
+			foreach (var evGroup in interfaceType.GetEvents (e => !e.IsSynthetic).GroupBy (m => m.DeclaringType).Reverse ())
 				foreach (var ev in evGroup) {
 					bool needsExplicitly = explicitly;
 					alreadyImplemented = implementingType.GetAllBaseTypeDefinitions().Any(
@@ -146,14 +153,21 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				}
 			
 			// Stub out non-implemented properties defined by @iface
-			foreach (var propGroup in interfaceType.GetProperties (p => !p.IsSynthetic && p.DeclaringTypeDefinition.ReflectionName == def.ReflectionName).GroupBy (m => m.DeclaringType).Reverse ())
+			foreach (var propGroup in interfaceType.GetProperties (p => !p.IsSynthetic).GroupBy (m => m.DeclaringType).Reverse ())
 				foreach (var prop in propGroup) {
 					bool needsExplicitly = explicitly;
 					alreadyImplemented = false;
 					foreach (var t in implementingType.GetAllBaseTypeDefinitions ()) {
-						if (t.Kind == TypeKind.Interface)
+						if (t.Kind == TypeKind.Interface) {
+							foreach (var cprop in t.Properties) {
+								if (cprop.Name == prop.Name && cprop.IsShadowing) {
+									if (!needsExplicitly && !cprop.ReturnType.Equals(prop.ReturnType))
+										needsExplicitly = true;
+								}
+							}
 							continue;
-						foreach (IProperty cprop in t.Properties) {
+						}
+						foreach (var cprop in t.Properties) {
 							if (cprop.Name == prop.Name) {
 								if (!needsExplicitly && !cprop.ReturnType.Equals(prop.ReturnType))
 									needsExplicitly = true;

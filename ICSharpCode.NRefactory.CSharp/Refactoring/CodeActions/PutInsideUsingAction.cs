@@ -29,6 +29,7 @@ using System.Linq;
 using ICSharpCode.NRefactory.CSharp.Resolver;
 using ICSharpCode.NRefactory.Semantics;
 using ICSharpCode.NRefactory.TypeSystem;
+using ICSharpCode.NRefactory.PatternMatching;
 
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
@@ -49,7 +50,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			if (!IsIDisposable (type))
 				return null;
 
-			var unit = context.RootNode as CompilationUnit;
+			var unit = context.RootNode as SyntaxTree;
 			if (unit == null)
 				return null;
 
@@ -64,7 +65,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					var variableToMoveOutside = new List<VariableDeclarationStatement> ();
 
 					if (lastReference != node) {
-						var statements = CollectStatements (variableDecl.NextSibling as Statement, 
+						var statements = CollectStatements (variableDecl.GetNextSibling (n => n is Statement) as Statement, 
 															lastReference.EndLocation).ToArray();
 
 						// collect statements to put inside 'using' and variable declaration to move outside 'using'
@@ -99,6 +100,11 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					foreach (var decl in variableToMoveOutside)
 						script.InsertBefore (variableDecl, decl);
 
+					if (body.Statements.Count > 0) {
+						var lastStatement = body.Statements.Last ();
+						if (IsDisposeInvocation (resolveResult.Variable.Name, lastStatement))
+							lastStatement.Remove ();
+					}
 					var usingStatement = new UsingStatement
 					{
 						ResourceAcquisition = new VariableDeclarationStatement (variableDecl.Type.Clone (), node.Name,
@@ -114,7 +120,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					remainingVariables.Variables.Remove (
 						remainingVariables.Variables.FirstOrDefault (v => v.Name == node.Name));
 					script.InsertBefore (usingStatement, remainingVariables);
-				});
+				}, node.NameToken);
 		}
 
 		static bool IsIDisposable (IType type)
@@ -128,20 +134,27 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				yield return statement;
 				if (statement.Contains (end))
 					break;
-				statement = statement.NextSibling as Statement;
+				statement = statement.GetNextSibling (n => n is Statement) as Statement;
 			}
 		}
 
-		static AstNode GetLastReference (IVariable variable, RefactoringContext context, CompilationUnit unit)
+		static AstNode GetLastReference (IVariable variable, RefactoringContext context, SyntaxTree unit)
 		{
 			AstNode lastReference = null;
-			refFinder.FindLocalReferences (variable, context.ParsedFile, unit, context.Compilation,
+			refFinder.FindLocalReferences (variable, context.UnresolvedFile, unit, context.Compilation,
 				(v, r) =>
 				{
 					if (lastReference == null || v.EndLocation > lastReference.EndLocation)
 						lastReference = v;
 				}, context.CancellationToken);
 			return lastReference;
+		}
+
+		static bool IsDisposeInvocation (string variableName, Statement statement)
+		{
+			var memberReferenceExpr = new MemberReferenceExpression (new IdentifierExpression (variableName), "Dispose");
+			var pattern = new ExpressionStatement (new InvocationExpression (memberReferenceExpr));
+			return pattern.Match (statement).Success;
 		}
 	}
 }

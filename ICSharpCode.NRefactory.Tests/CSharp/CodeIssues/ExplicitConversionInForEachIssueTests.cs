@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -66,10 +66,15 @@ class Foo {
 		foreach (IDisposable element in c) { }
 	}
 }";
-
-			TestRefactoringContext context;
-			var issues = GetIssues (new ExplicitConversionInForEachIssue (), input, out context);
-			Assert.AreEqual (1, issues.Count);
+			string output = @"using System.Collections.Generic;
+class Foo {
+	void Bar (IList<IList<IDisposable>> c)
+	{
+		foreach (IList<IDisposable> element in c) { }
+	}
+}";
+			
+			Test<ExplicitConversionInForEachIssue>(input, output);
 		}
 	}
 }

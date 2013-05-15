@@ -1,4 +1,4 @@
-// 
+﻿// 
 // ICompletionDataFactory.cs
 //  
 // Author:
@@ -35,12 +35,19 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 		ICompletionData CreateEntityCompletionData (IEntity entity);
 		ICompletionData CreateEntityCompletionData (IEntity entity, string text);
 		
-		ICompletionData CreateTypeCompletionData (IType type, string shortType);
+		ICompletionData CreateTypeCompletionData (IType type, bool showFullName, bool isInAttributeContext);
+
+		/// <summary>
+		/// Creates the member completion data. 
+		/// Form: Type.Member
+		/// Used for generating enum members Foo.A, Foo.B where the enum 'Foo' is valid.
+		/// </summary>
+		ICompletionData CreateMemberCompletionData(IType type, IEntity member);
 
 		/// <summary>
 		/// Creates a generic completion data.
 		/// </summary>
-		/// <returns>
+		/// <param name='title'>
 		/// The title of the completion data
 		/// </param>
 		/// <param name='description'>
@@ -51,7 +58,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 		/// </param>
 		ICompletionData CreateLiteralCompletionData (string title, string description = null, string insertText = null);
 		
-		ICompletionData CreateNamespaceCompletionData (string name);
+		ICompletionData CreateNamespaceCompletionData (INamespace name);
 		
 		ICompletionData CreateVariableCompletionData (IVariable variable);
 
@@ -65,5 +72,12 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 		IEnumerable<ICompletionData> CreateCodeTemplateCompletionData ();
 		
 		IEnumerable<ICompletionData> CreatePreProcessorDefinesCompletionData ();
+
+		/// <summary>
+		/// Creates a completion data that adds the required using for the created type.
+		/// </summary>
+		/// <param name="type">The type to import</param>
+		/// <param name="useFullName">If set to true the full name of the type needs to be used.</param>
+		ICompletionData CreateImportCompletionData(IType type, bool useFullName);
 	}
 }

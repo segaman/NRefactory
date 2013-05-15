@@ -31,57 +31,87 @@ using ICSharpCode.NRefactory.PatternMatching;
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
 	/// <summary>
-	/// Checks for str == null && str == "" 
+	/// Checks for str == null &amp;&amp; str == " "
 	/// Converts to: string.IsNullOrEmpty (str)
 	/// </summary>
 	[IssueDescription("Use string.IsNullOrEmpty",
 	       Description = "Uses shorter string.IsNullOrEmpty call instead of a longer condition.",
 	       Category = IssueCategories.Improvements,
-	       Severity = Severity.Suggestion)]
+	       Severity = Severity.Suggestion,
+           ResharperDisableKeyword = "ReplaceWithStringIsNullOrEmpty")]
 	public class StringIsNullOrEmptyIssue : ICodeIssueProvider
 	{
 		static readonly Pattern pattern = new Choice {
-			// str == null || str == "" 
+			// str == null || str == ""
+			// str == null || str.Length == 0
 			new BinaryOperatorExpression (
-				PatternHelper.CommutativeOperator(new AnyNode ("str"), BinaryOperatorType.Equality, new NullReferenceExpression ()),
+				PatternHelper.CommutativeOperator (new AnyNode ("str"), BinaryOperatorType.Equality, new NullReferenceExpression ()),
 				BinaryOperatorType.ConditionalOr,
-				PatternHelper.CommutativeOperator(new Backreference ("str"), BinaryOperatorType.Equality, new PrimitiveExpression (""))
+				new Choice {
+					PatternHelper.CommutativeOperator (new Backreference ("str"), BinaryOperatorType.Equality, new PrimitiveExpression ("")),
+					PatternHelper.CommutativeOperator (
+						new MemberReferenceExpression (new Backreference ("str"), "Length"),
+						BinaryOperatorType.Equality,
+						new PrimitiveExpression (0)
+					)
+				}
 			),
 			// str == "" || str == null
+			// str.Length == 0 || str == null
 			new BinaryOperatorExpression (
-				PatternHelper.CommutativeOperator(new AnyNode ("str"), BinaryOperatorType.Equality, new PrimitiveExpression ("")),
+				new Choice {
+					PatternHelper.CommutativeOperator (new AnyNode ("str"), BinaryOperatorType.Equality, new PrimitiveExpression ("")),
+					PatternHelper.CommutativeOperator (
+						new MemberReferenceExpression (new AnyNode ("str"), "Length"),
+						BinaryOperatorType.Equality,
+						new PrimitiveExpression (0)
+					)
+				},
 				BinaryOperatorType.ConditionalOr,
 				PatternHelper.CommutativeOperator(new Backreference ("str"), BinaryOperatorType.Equality, new NullReferenceExpression ())
-			),
+			)
 		};
 
 		static readonly Pattern negPattern = new Choice {
-			// str != null && str != "" 
+			// str != null && str != ""
+			// str != null && str.Length != 0
 			new BinaryOperatorExpression (
 				PatternHelper.CommutativeOperator(new AnyNode ("str"), BinaryOperatorType.InEquality, new NullReferenceExpression ()),
 				BinaryOperatorType.ConditionalAnd,
-				PatternHelper.CommutativeOperator(new Backreference ("str"), BinaryOperatorType.InEquality, new PrimitiveExpression (""))
+				new Choice {
+					PatternHelper.CommutativeOperator (new Backreference ("str"), BinaryOperatorType.InEquality, new PrimitiveExpression ("")),
+					PatternHelper.CommutativeOperator (
+						new MemberReferenceExpression (new Backreference ("str"), "Length"),
+						BinaryOperatorType.InEquality,
+						new PrimitiveExpression (0)
+					)
+				}
 			),
 			// str != "" && str != null
+			// str.Length != 0 && str != null
 			new BinaryOperatorExpression (
-				PatternHelper.CommutativeOperator(new AnyNode ("str"), BinaryOperatorType.InEquality, new PrimitiveExpression ("")),
+				new Choice {
+					PatternHelper.CommutativeOperator (new AnyNode ("str"), BinaryOperatorType.InEquality, new PrimitiveExpression ("")),
+					PatternHelper.CommutativeOperator (
+						new MemberReferenceExpression (new AnyNode ("str"), "Length"),
+						BinaryOperatorType.InEquality,
+						new PrimitiveExpression (0)
+					)
+				},
 				BinaryOperatorType.ConditionalAnd,
 				PatternHelper.CommutativeOperator(new Backreference ("str"), BinaryOperatorType.InEquality, new NullReferenceExpression ())
-			),
+			)
 		};
 
 		public IEnumerable<CodeIssue> GetIssues(BaseRefactoringContext context)
 		{
-			return new GatherVisitor(context, this).GetIssues();
+			return new GatherVisitor(context).GetIssues();
 		}
 		
-		class GatherVisitor : GatherVisitorBase
+		class GatherVisitor : GatherVisitorBase<StringIsNullOrEmptyIssue>
 		{
-			readonly StringIsNullOrEmptyIssue inspector;
-			
-			public GatherVisitor (BaseRefactoringContext ctx, StringIsNullOrEmptyIssue inspector) : base (ctx)
+			public GatherVisitor (BaseRefactoringContext ctx) : base (ctx)
 			{
-				this.inspector = inspector;
 			}
 
 			public override void VisitBinaryOperatorExpression(BinaryOperatorExpression binaryOperatorExpression)
@@ -95,6 +125,9 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				}
 				if (m.Success) {
 					var str = m.Get<Expression>("str").Single();
+					var def = ctx.Resolve (str).Type.GetDefinition ();
+					if (def == null || def.KnownTypeCode != ICSharpCode.NRefactory.TypeSystem.KnownTypeCode.String)
+						return;
 					AddIssue(binaryOperatorExpression, ctx.TranslateString("Use string.IsNullOrEmpty"), script => {
 						Expression expr = new PrimitiveType ("string").Invoke("IsNullOrEmpty", str.Clone());
 						if (isNegated)

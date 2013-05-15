@@ -24,11 +24,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using ICSharpCode.NRefactory.CSharp.Analysis;
-using ICSharpCode.NRefactory.CSharp.Resolver;
 using ICSharpCode.NRefactory.Semantics;
 using ICSharpCode.NRefactory.TypeSystem;
 
@@ -36,8 +34,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
 	public abstract class AccessToClosureIssue : ICodeIssueProvider
 	{
-		static FindReferences refFinder = new FindReferences ();
-		static ControlFlowGraphBuilder cfgBuilder = new ControlFlowGraphBuilder ();
+		ControlFlowGraphBuilder cfgBuilder = new ControlFlowGraphBuilder ();
 
 		public string Title
 		{ get; private set; }
@@ -49,7 +46,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 		public IEnumerable<CodeIssue> GetIssues (BaseRefactoringContext context)
 		{
-			var unit = context.RootNode as CompilationUnit;
+			var unit = context.RootNode as SyntaxTree;
 			if (unit == null)
 				return Enumerable.Empty<CodeIssue> ();
 			return new GatherVisitor (context, unit, this).GetIssues ();
@@ -63,48 +60,40 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		protected abstract NodeKind GetNodeKind (AstNode node);
 
 		protected virtual bool CanReachModification (ControlFlowNode node, Statement start,
-												  IDictionary<Statement, IList<Node>> modifications)
+												     IDictionary<Statement, IList<Node>> modifications)
 		{
 			return node.NextStatement != null && node.NextStatement != start &&
 				   modifications.ContainsKey (node.NextStatement);
 		}
 
 		protected abstract IEnumerable<CodeAction> GetFixes (BaseRefactoringContext context, Node env, 
-															 string variableName, AstType variableType);
+															 string variableName);
 
 		#region GatherVisitor
 
-		class GatherVisitor : GatherVisitorBase
+		class GatherVisitor : GatherVisitorBase<AccessToClosureIssue>
 		{
-			CompilationUnit unit;
 			string title;
-			AccessToClosureIssue issueProvider;
 
-			public GatherVisitor (BaseRefactoringContext context, CompilationUnit unit,
+			public GatherVisitor (BaseRefactoringContext context, SyntaxTree unit,
 								  AccessToClosureIssue issueProvider)
-				: base (context)
+				: base (context, issueProvider)
 			{
 				this.title = context.TranslateString (issueProvider.Title);
-				this.unit = unit;
-				this.issueProvider = issueProvider;
 			}
 
 			public override void VisitVariableInitializer (VariableInitializer variableInitializer)
 			{
 				var variableDecl = variableInitializer.Parent as VariableDeclarationStatement;
-				if (variableDecl == null)
-					return;
-
-				CheckVariable (((LocalResolveResult)ctx.Resolve (variableInitializer)).Variable, 
-							   variableDecl.Type, 
-							   variableDecl.GetParent<Statement> ());
+				if (variableDecl != null)
+					CheckVariable (((LocalResolveResult)ctx.Resolve (variableInitializer)).Variable, 
+								   variableDecl.GetParent<Statement> ());
 				base.VisitVariableInitializer (variableInitializer);
 			}
 
 			public override void VisitForeachStatement (ForeachStatement foreachStatement)
 			{
 				CheckVariable (((LocalResolveResult)ctx.Resolve (foreachStatement.VariableNameToken)).Variable,
-							   foreachStatement.VariableType, 
 							   foreachStatement);
 				base.VisitForeachStatement (foreachStatement);
 			}
@@ -119,42 +108,43 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					body = ((AnonymousMethodExpression)parent).Body;
 				} else if (parent is LambdaExpression) {
 					body = ((LambdaExpression)parent).Body as Statement;
+				} else if (parent is ConstructorDeclaration) {
+					body = ((ConstructorDeclaration)parent).Body;
+				} else if (parent is OperatorDeclaration) {
+					body = ((OperatorDeclaration)parent).Body;
 				}
-				if (body != null)
-					CheckVariable (((LocalResolveResult)ctx.Resolve (parameterDeclaration)).Variable, 
-								   parameterDeclaration.Type, body);
+				if (body != null) {
+					var lrr = ctx.Resolve (parameterDeclaration) as LocalResolveResult;
+					if (lrr != null)
+						CheckVariable (lrr.Variable, body);
+				}
 				base.VisitParameterDeclaration (parameterDeclaration);
 			}
 
-			void FindLocalReferences (IVariable variable, FoundReferenceCallback callback)
+			void CheckVariable(IVariable variable, Statement env)
 			{
-				refFinder.FindLocalReferences (variable, ctx.ParsedFile, unit, ctx.Compilation, callback, 
-											   ctx.CancellationToken);
-			}
-
-			void CheckVariable (IVariable variable, AstType type, Statement env)
-			{
-				if (!issueProvider.IsTargetVariable (variable))
+				if (!IssueProvider.IsTargetVariable(variable))
 					return;
 
 				var root = new Environment (env, env);
 				var envLookup = new Dictionary<AstNode, Environment> ();
 				envLookup [env] = root;
 
-				FindLocalReferences (variable, (astNode, resolveResult) => 
-					AddNode (envLookup, new Node (astNode, issueProvider.GetNodeKind (astNode))));
+				foreach (var result in ctx.FindReferences(env, variable)) {
+					AddNode(envLookup, new Node(result.Node, IssueProvider.GetNodeKind(result.Node)));
+				}
 
 				root.SortChildren ();
-				CollectIssues (root, variable.Name, type);
+				CollectIssues (root, variable.Name);
 			}
 
-			void CollectIssues (Environment env, string variableName, AstType variableType)
+			void CollectIssues (Environment env, string variableName)
 			{
 				IList<ControlFlowNode> cfg = null;
 				IDictionary<Statement, IList<Node>> modifications = null;
 
 				if (env.Body != null) {
-					cfg = cfgBuilder.BuildControlFlowGraph (env.Body);
+					cfg = IssueProvider.cfgBuilder.BuildControlFlowGraph (env.Body);
 					modifications = new Dictionary<Statement, IList<Node>> ();
 					foreach (var node in env.Children) {
 						if (node.Kind == NodeKind.Modification || node.Kind == NodeKind.ReferenceAndModification) {
@@ -169,20 +159,20 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				foreach (var child in env.GetChildEnvironments ()) {
 					if (!child.IssueCollected && cfg != null && 
 						CanReachModification (cfg, child, modifications))
-						CollectAllIssues (child, variableName, variableType);
+						CollectAllIssues (child, variableName);
 
-					CollectIssues (child, variableName, variableType);
+					CollectIssues (child, variableName);
 				}
 			}
 
-			void CollectAllIssues (Environment env, string variableName, AstType variableType)
+			void CollectAllIssues (Environment env, string variableName)
 			{
-				var fixes = issueProvider.GetFixes (ctx, env, variableName, variableType).ToArray ();
+				var fixes = IssueProvider.GetFixes (ctx, env, variableName).ToArray ();
 				env.IssueCollected = true;
 
 				foreach (var child in env.Children) {
 					if (child is Environment) {
-						CollectAllIssues ((Environment)child, variableName, variableType);
+						CollectAllIssues ((Environment)child, variableName);
 					} else {
 						if (child.Kind != NodeKind.Modification)
 							AddIssue (child.AstNode, title, fixes);
@@ -238,7 +228,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				var visitedNodes = new HashSet<ControlFlowNode> (stack);
 				while (stack.Count > 0) {
 					var node = stack.Pop ();
-					if (issueProvider.CanReachModification (node, start, modifications))
+					if (IssueProvider.CanReachModification (node, start, modifications))
 						return true;
 					foreach (var edge in node.Outgoing) {
 						if (visitedNodes.Add (edge.To))

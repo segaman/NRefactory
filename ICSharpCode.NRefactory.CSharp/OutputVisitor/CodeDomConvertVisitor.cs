@@ -1,4 +1,4 @@
-// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -38,18 +38,19 @@ namespace ICSharpCode.NRefactory.CSharp
 	/// </remarks>
 	public class CodeDomConvertVisitor : IAstVisitor<CodeObject>
 	{
-		//ICompilation compilation = MinimalResolveContext.Instance;
 		CSharpAstResolver resolver;
 		
 		/// <summary>
-		/// Gets/Sets whether the visitor should use fully-qualified type references.
+		/// Gets/Sets whether the visitor should convert short type names into
+		/// fully qualified type names.
+		/// The default is <c>false</c>.
 		/// </summary>
 		public bool UseFullyQualifiedTypeNames { get; set; }
 		
 		/// <summary>
 		/// Gets whether the visitor is allowed to produce snippet nodes for
 		/// code that cannot be converted.
-		/// The default is true. If this property is set to false,
+		/// The default is <c>true</c>. If this property is set to <c>false</c>,
 		/// unconvertible code will throw a NotSupportedException.
 		/// </summary>
 		public bool AllowSnippetNodes { get; set; }
@@ -464,8 +465,11 @@ namespace ICSharpCode.NRefactory.CSharp
 			CodeExpression target = Convert(memberReferenceExpression.Target);
 			ResolveResult rr = Resolve(memberReferenceExpression);
 			MemberResolveResult mrr = rr as MemberResolveResult;
+			TypeResolveResult trr = rr as TypeResolveResult;
 			if (mrr != null) {
 				return HandleMemberReference(target, memberReferenceExpression.MemberName, memberReferenceExpression.TypeArguments, mrr);
+			} else if (trr != null) {
+				return new CodeTypeReferenceExpression(Convert(trr.Type));
 			} else {
 				if (memberReferenceExpression.TypeArguments.Any() || rr is MethodGroupResolveResult) {
 					return new CodeMethodReferenceExpression(target, memberReferenceExpression.MemberName, Convert(memberReferenceExpression.TypeArguments));
@@ -1239,6 +1243,7 @@ namespace ICSharpCode.NRefactory.CSharp
 		CodeObject IAstVisitor<CodeObject>.VisitSyntaxTree(SyntaxTree syntaxTree)
 		{
 			CodeCompileUnit cu = new CodeCompileUnit();
+			var globalImports = new List<CodeNamespaceImport> ();
 			foreach (AstNode node in syntaxTree.Children) {
 				CodeObject o = node.AcceptVisitor(this);
 				
@@ -1249,6 +1254,20 @@ namespace ICSharpCode.NRefactory.CSharp
 				CodeTypeDeclaration td = o as CodeTypeDeclaration;
 				if (td != null) {
 					cu.Namespaces.Add(new CodeNamespace() { Types = { td } });
+				}
+				
+				var import = o as CodeNamespaceImport;
+				if (import != null)
+					globalImports.Add (import);
+			}
+			foreach (var gi in globalImports) {
+				for (int j = 0; j < cu.Namespaces.Count; j++) {
+					var cn = cu.Namespaces [j];
+					bool found = cn.Imports
+						.Cast<CodeNamespaceImport> ()
+							.Any (ns => ns.Namespace == gi.Namespace);
+					if (!found)
+						cn.Imports.Add (gi);
 				}
 			}
 			return cu;
@@ -1322,12 +1341,12 @@ namespace ICSharpCode.NRefactory.CSharp
 
 		CodeObject IAstVisitor<CodeObject>.VisitNewLine(NewLineNode newLineNode)
 		{
-			throw new NotSupportedException();
+			return null;
 		}
 
 		CodeObject IAstVisitor<CodeObject>.VisitWhitespace(WhitespaceNode whitespaceNode)
 		{
-			throw new NotSupportedException();
+			return null;
 		}
 
 		CodeObject IAstVisitor<CodeObject>.VisitText(TextNode textNode)

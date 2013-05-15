@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -136,7 +136,7 @@ class A { public A() : ba$se() {} }");
 		[Test]
 		public void TestBug5114()
 		{
-			var rr = ResolveAtLocation<MethodGroupResolveResult>(
+			var rr = ResolveAtLocation<MemberResolveResult>(
 				@"using System;
 
 namespace Bug5114 
@@ -159,7 +159,7 @@ namespace Bug5114
 	}
 }
 ");
-			Assert.AreEqual("HandleLongPressGesture", rr.MethodName);
+			Assert.AreEqual("HandleLongPressGesture", rr.Member.Name);
 		}
 
 		[Test]
@@ -178,6 +178,77 @@ class Foo {
 		}; 
 	} 
 }"));
+		}
+
+		[Test]
+		public void TestBug6758()
+		{
+			var rr = ResolveAtLocation<TypeResolveResult>(
+				@"using System;                                                                   
+
+namespace TestCrash                                                             
+{                                                                               
+        class A                                                                 
+        {                                                                       
+
+        }                                                                       
+
+        class B<T> : T where T: $A                                               
+        {                                                                       
+
+        }                                                                       
+}
+");
+			Assert.AreEqual("A", rr.Type.Name);
+		}
+
+		
+		[Test]
+		public void CreateDelegateFromOverloadedMethod()
+		{
+			var rr = ResolveAtLocation<MemberResolveResult>(
+				@"using System;                                                                   
+class Test {
+	public void Method() {}
+	public void Method(int a) {}
+	
+	public Test() {
+		Action a = Meth$od;
+	}
+}
+");
+			Assert.AreEqual("Method", rr.Member.Name);
+			Assert.AreEqual(0, ((IMethod)rr.Member).Parameters.Count);
+		}
+		
+		[Test]
+		public void ExplicitlyCreateDelegateFromOverloadedMethod()
+		{
+			var rr = ResolveAtLocation<MemberResolveResult>(
+				@"using System;                                                                   
+class Test {
+	public void Method() {}
+	public void Method(int a) {}
+	
+	public Test() {
+		Action a = new Action(Meth$od);
+	}
+}
+");
+			Assert.AreEqual("Method", rr.Member.Name);
+			Assert.AreEqual(0, ((IMethod)rr.Member).Parameters.Count);
+		}
+
+		[Test]
+		public void MemberTypeTarget()
+		{
+			var rr = ResolveAtLocation<TypeResolveResult>(
+				@"using System;                                                                   
+class Test {
+	E$nvironment.SpecialFolder folder;
+}
+");
+			Assert.AreEqual("System.Environment", rr.Type.FullName);
 		}
 	}
 }

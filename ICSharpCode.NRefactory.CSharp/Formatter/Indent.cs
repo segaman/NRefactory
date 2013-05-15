@@ -28,24 +28,52 @@ using System.Collections.Generic;
 
 namespace ICSharpCode.NRefactory.CSharp
 {
-	public enum IndentType {
+	public enum IndentType
+	{
 		Block,
+		DoubleBlock,
 		Continuation,
-		Label
+		Label,
+		Empty
 	}
 
 	public class Indent
 	{
-		readonly Stack<IndentType> indentStack = new Stack<IndentType> ();
+		readonly Stack<IndentType> indentStack = new Stack<IndentType>();
 		readonly TextEditorOptions options;
-		
 		int curIndent;
+
+		public int CurIndent {
+			get {
+				return curIndent;
+			}
+		}
 
 		public Indent(TextEditorOptions options)
 		{
 			this.options = options;
+			Reset();
 		}
 
+		Indent(TextEditorOptions options, Stack<IndentType> indentStack, int curIndent) : this(options)
+		{
+			this.indentStack = indentStack;
+			this.curIndent = curIndent;
+		}
+
+		public Indent Clone()
+		{
+			var result = new Indent(options, new Stack<IndentType>(indentStack), curIndent);
+			result.indentString = indentString;
+			return result;
+		}
+
+		public void Reset()
+		{
+			curIndent = 0;
+			indentString = "";
+			indentStack.Clear();
+		}
 
 		public void Push(IndentType type)
 		{
@@ -54,10 +82,27 @@ namespace ICSharpCode.NRefactory.CSharp
 			Update();
 		}
 
+		public void Push(Indent indent)
+		{
+			foreach (var i in indent.indentStack)
+				Push(i);
+		}
+
 		public void Pop()
 		{
 			curIndent -= GetIndent(indentStack.Pop());
 			Update();
+		}
+
+		public int Count {
+			get {
+				return indentStack.Count;
+			}
+		}
+
+		public IndentType Peek()
+		{
+			return indentStack.Peek();
 		}
 
 		int GetIndent(IndentType indentType)
@@ -65,10 +110,14 @@ namespace ICSharpCode.NRefactory.CSharp
 			switch (indentType) {
 				case IndentType.Block:
 					return options.IndentSize;
+				case IndentType.DoubleBlock:
+					return options.IndentSize * 2;
 				case IndentType.Continuation:
 					return options.ContinuationIndent;
 				case IndentType.Label:
 					return options.LabelIndent;
+				case IndentType.Empty:
+					return 0;
 				default:
 					throw new ArgumentOutOfRangeException();
 			}
@@ -80,7 +129,7 @@ namespace ICSharpCode.NRefactory.CSharp
 				indentString = new string(' ', curIndent);
 				return;
 			}
-			indentString = new string('\t', curIndent / options.TabSize) + new string(' ', curIndent % options.TabSize) + new string (' ', ExtraSpaces);
+			indentString = new string('\t', curIndent / options.TabSize) + new string(' ', curIndent % options.TabSize) + new string(' ', ExtraSpaces);
 		}
 
 		int extraSpaces;
@@ -90,12 +139,15 @@ namespace ICSharpCode.NRefactory.CSharp
 				return extraSpaces;
 			}
 			set {
+				if (value < 0)
+					throw new ArgumentOutOfRangeException("ExtraSpaces >= 0 but was " + value);
 				extraSpaces = value;
 				Update();
 			}
 		}
 
 		string indentString;
+
 		public string IndentString {
 			get {
 				return indentString;

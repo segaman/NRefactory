@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -65,7 +65,7 @@ namespace ICSharpCode.NRefactory.CSharp.Parser.TypeMembers
 			Assert.AreEqual("op_UnaryPlus", od.Name);
 		}
 		
-		[Test, Ignore("Parser crash")]
+		[Test]
 		public void InvalidOperatorTrueDeclaration()
 		{
 			ParseUtilCSharp.ParseTypeMember<OperatorDeclaration>("public static implicit operator true(MyBool b) {}", expectErrors: true);

@@ -30,12 +30,13 @@ using System.Linq;
 
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
-	[IssueDescription ("Access to modified closure variable",
-					   Description = "Access to closure variable from anonymous method when the variable is modified " +
-									 "externally",
-					   Category = IssueCategories.CodeQualityIssues,
-					   Severity = Severity.Warning,
-					   IssueMarker = IssueMarker.Underline)]	
+    //[IssueDescription("Access to modified closure variable",
+    //                   Description = "Access to closure variable from anonymous method when the variable is modified " +
+    //                                 "externally",
+    //                   Category = IssueCategories.CodeQualityIssues,
+    //                   Severity = Severity.Warning,
+    //                   IssueMarker = IssueMarker.Underline,
+    //                   ResharperDisableKeyword = "AccessToModifiedClosure")]	
 	public class AccessToModifiedClosureIssue : AccessToClosureIssue
 	{
 		public AccessToModifiedClosureIssue ()
@@ -66,7 +67,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		}
 
 		protected override IEnumerable<CodeAction> GetFixes (BaseRefactoringContext context, Node env,
-															 string variableName, AstType variableType)
+															 string variableName)
 		{
 			var containingStatement = env.ContainingStatement;
 
@@ -82,9 +83,11 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 			Action<Script> action = script =>
 			{
-				var newName = LocalVariableNamePicker.PickSafeName (containingStatement.GetParent<MethodDeclaration> (),
-															Enumerable.Range (1, 100).Select (i => variableName + i));
-				var variableDecl = new VariableDeclarationStatement (variableType.Clone (), newName, 
+				var newName = LocalVariableNamePicker.PickSafeName (
+					containingStatement.GetParent<EntityDeclaration> (),
+					Enumerable.Range (1, 100).Select (i => variableName + i));
+
+				var variableDecl = new VariableDeclarationStatement (new SimpleType("var"), newName, 
 																	 new IdentifierExpression (variableName));
 				
 				if (containingStatement.Parent is BlockStatement || containingStatement.Parent is SwitchSection) {
@@ -107,7 +110,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				}
 				script.Link (textNodes.ToArray ());
 			};
-			yield return new CodeAction (context.TranslateString ("Copy to local variable"), action);
+			yield return new CodeAction (context.TranslateString ("Copy to local variable"), action, env.AstNode);
 		}
 	}
 }

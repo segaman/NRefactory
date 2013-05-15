@@ -127,7 +127,7 @@ namespace Mono.CSharp {
 			return true;
 		}
 	}
-	#if !FULL_AST
+#if !FULL_AST
 	/// <summary>
 	///   This is an arbitrarily seekable StreamReader wrapper.
 	///
@@ -137,7 +137,8 @@ namespace Mono.CSharp {
 	/// </summary>
 	public class SeekableStreamReader : IDisposable
 	{
-		public const int DefaultReadAheadSize = 2048;
+		public const int DefaultReadAheadSize =
+			4096 / 2;
 
 		StreamReader reader;
 		Stream stream;
@@ -277,6 +278,7 @@ namespace Mono.CSharp {
 		}
 	}
 #endif
+
 	public class UnixUtils {
 		[System.Runtime.InteropServices.DllImport ("libc", EntryPoint="isatty")]
 		extern static int _isatty (int fd);

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -19,6 +19,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using ICSharpCode.NRefactory.CSharp.TypeSystem;
 using ICSharpCode.NRefactory.Semantics;
 using ICSharpCode.NRefactory.TypeSystem;
@@ -397,6 +398,7 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 		public void ImplicitLongConstantExpressionConversion()
 		{
 			Assert.IsFalse(IntegerLiteralConversion(0L, typeof(int)));
+			Assert.IsFalse(IntegerLiteralConversion(0L, typeof(short)));
 			Assert.IsTrue(IntegerLiteralConversion(0L, typeof(long)));
 			Assert.IsTrue(IntegerLiteralConversion(0L, typeof(ulong)));
 			
@@ -508,8 +510,8 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 					) } ) }));
 			
 			ICompilation compilation = TypeSystemHelper.CreateCompilation(a, b);
-			ITypeDefinition resolvedA = compilation.MainAssembly.GetTypeDefinition(a);
-			ITypeDefinition resolvedB = compilation.MainAssembly.GetTypeDefinition(b);
+			ITypeDefinition resolvedA = compilation.MainAssembly.GetTypeDefinition(a.FullTypeName);
+			ITypeDefinition resolvedB = compilation.MainAssembly.GetTypeDefinition(b.FullTypeName);
 			
 			IType type1 = new ParameterizedType(resolvedB, new [] { compilation.FindType(KnownTypeCode.Double) });
 			IType type2 = new ParameterizedType(resolvedA, new [] { new ParameterizedType(resolvedB, new[] { compilation.FindType(KnownTypeCode.String) }) });
@@ -601,5 +603,773 @@ class Test {
 			Assert.AreEqual(C.ImplicitReferenceConversion, GetConversion(program));
 		}
 		
+		[Test]
+		public void MethodGroupConversion_Void()
+		{
+			string program = @"using System;
+delegate void D();
+class Test {
+	D d = $M$;
+	public static void M() {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.IsFalse(c.DelegateCapturesFirstArgument);
+			Assert.IsNotNull(c.Method);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_Void_InstanceMethod()
+		{
+			string program = @"using System;
+delegate void D();
+class Test {
+	D d;
+	public void M() {
+		d = $M$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.IsTrue(c.DelegateCapturesFirstArgument);
+			Assert.IsNotNull(c.Method);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_MatchingSignature()
+		{
+			string program = @"using System;
+delegate object D(int argument);
+class Test {
+	D d = $M$;
+	public static object M(int argument) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_InvalidReturnType()
+		{
+			string program = @"using System;
+delegate object D(int argument);
+class Test {
+	D d = $M$;
+	public static int M(int argument) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_CovariantReturnType()
+		{
+			string program = @"using System;
+delegate object D(int argument);
+class Test {
+	D d = $M$;
+	public static string M(int argument) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_RefArgumentTypesEqual()
+		{
+			string program = @"using System;
+delegate void D(ref object o);
+class Test {
+	D d = $M$;
+	public static void M(ref object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_RefArgumentObjectVsDynamic()
+		{
+			string program = @"using System;
+delegate void D(ref object o);
+class Test {
+	D d = $M$;
+	public static void M(ref dynamic o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_RefVsOut()
+		{
+			string program = @"using System;
+delegate void D(ref object o);
+class Test {
+	D d = $M$;
+	public static void M(out object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_RefVsNormal()
+		{
+			string program = @"using System;
+delegate void D(ref object o);
+class Test {
+	D d = $M$;
+	public static void M(object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_NormalVsOut()
+		{
+			string program = @"using System;
+delegate void D(object o);
+class Test {
+	D d = $M$;
+	public static void M(out object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_MatchingNormalParameter()
+		{
+			string program = @"using System;
+delegate void D(object o);
+class Test {
+	D d = $M$;
+	public static void M(object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_IdentityConversion()
+		{
+			string program = @"using System;
+delegate void D(object o);
+class Test {
+	D d = $M$;
+	public static void M(dynamic o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_Contravariance()
+		{
+			string program = @"using System;
+delegate void D(string o);
+class Test {
+	D d = $M$;
+	public static void M(object o) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			
+		}
+		
+		[Test, Ignore("Not sure if this conversion should be valid or not... NR and mcs both accept it as valid, csc treats it as invalid")]
+		public void MethodGroupConversion_NoContravarianceDynamic()
+		{
+			string program = @"using System;
+delegate void D(string o);
+class Test {
+	D d = $M$;
+	public static void M(dynamic o) {}
+}";
+			var c = GetConversion(program);
+			//Assert.IsFrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_ExactMatchIsBetter()
+		{
+			string program = @"using System;
+class Test {
+	delegate void D(string a);
+	D d = $M$;
+	static void M(object x) {}
+	static void M(string x = null) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.AreEqual("System.String", c.Method.Parameters.Single().Type.FullName);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_CannotLeaveOutOptionalParameters()
+		{
+			string program = @"using System;
+class Test {
+	delegate void D(string a);
+	D d = $M$;
+	static void M(object x) {}
+	static void M(string x, string y = null) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.AreEqual("System.Object", c.Method.Parameters.Single().Type.FullName);
+		}
+		
+		[Test]
+		public void MethodGroupConversion_CannotUseExpandedParams()
+		{
+			string program = @"using System;
+class Test {
+	delegate void D(string a);
+	D d = $M$;
+	static void M(object x) {}
+	static void M(params string[] x) {}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.AreEqual("System.Object", c.Method.Parameters.Single().Type.FullName);
+		}
+
+		[Test]
+		public void MethodGroupConversion_ExtensionMethod()
+		{
+			string program = @"using System;
+static class Ext {
+	public static void M(this string s, int x) {}
+}
+class Test {
+	delegate void D(int a);
+	void F() {
+		string s = """";
+		D d = $s.M$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.IsTrue(c.DelegateCapturesFirstArgument);
+		}
+
+		[Test]
+		public void MethodGroupConversion_ExtensionMethodUsedAsStaticMethod()
+		{
+			string program = @"using System;
+static class Ext {
+	public static void M(this string s, int x) {}
+}
+class Test {
+	delegate void D(string s, int a);
+	void F() {
+		D d = $Ext.M$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsMethodGroupConversion);
+			Assert.IsFalse(c.DelegateCapturesFirstArgument);
+		}
+
+		[Test]
+		public void UserDefined_IntLiteral_ViaUInt_ToCustomStruct()
+		{
+			string program = @"using System;
+struct T {
+	public static implicit operator T(uint a) { return new T(); }
+}
+class Test {
+	static void M() {
+		T t = $1$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+		}
+		
+		[Test]
+		public void UserDefined_NullLiteral_ViaString_ToCustomStruct()
+		{
+			string program = @"using System;
+struct T {
+	public static implicit operator T(string a) { return new T(); }
+
+}
+class Test {
+	static void M() {
+		T t = $null$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+		}
+
+		
+		[Test]
+		public void UserDefined_CanUseLiftedEvenIfReturnTypeAlreadyNullable()
+		{
+			string program = @"using System;
+struct S {
+	public static implicit operator short?(S s) { return 0; }
+}
+
+class Test {
+	static void M(S? s) {
+		int? i = $s$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.IsTrue(c.IsLifted);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_PicksExactSourceTypeIfPossible() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(int i) {return new Convertible(); }
+	public static implicit operator Convertible(short s) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible a = $33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("i", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_PicksMostEncompassedSourceType() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(long l) {return new Convertible(); }
+	public static implicit operator Convertible(uint ui) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible a = $(ushort)33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("ui", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_NoMostEncompassedSourceTypeIsInvalid() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(ulong l) {return new Convertible(); }
+	public static implicit operator Convertible(int ui) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible a = $(ushort)33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_PicksExactTargetTypeIfPossible() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator int(Convertible i) {return 0; }
+	public static implicit operator short(Convertible s) {return 0; }
+}
+class Test {
+	public void M() {
+		int a = $new Convertible()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("i", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_PicksMostEncompassingTargetType() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator int(Convertible i) {return 0; }
+	public static implicit operator ushort(Convertible us) {return 0; }
+}
+class Test {
+	public void M() {
+		ulong a = $new Convertible()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("us", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_NoMostEncompassingTargetTypeIsInvalid() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator uint(Convertible i) {return 0; }
+	public static implicit operator short(Convertible us) {return 0; }
+}
+class Test {
+	public void M() {
+		long a = $new Convertible()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_AmbiguousIsInvalid() {
+			string program = @"using System;
+class Convertible1 {
+	public static implicit operator Convertible2(Convertible1 c) {return 0; }
+}
+class Convertible2 {
+	public static implicit operator Convertible2(Convertible1 c) {return 0; }
+}
+class Test {
+	public void M() {
+		Convertible2 a = $new Convertible1()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_DefinedNullableTakesPrecedenceOverLifted() {
+			string program = @"using System;
+struct Convertible {
+	public static implicit operator Convertible(int i) {return new Convertible(); }
+	public static implicit operator Convertible?(int? ni) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible? a = $(int?)33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.IsFalse(c.IsLifted);
+			Assert.AreEqual("ni", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_UIntConstant() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(long l) {return new Convertible(); }
+	public static implicit operator Convertible(uint ui) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible a = $33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("ui", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_NullableUIntConstant() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(long? l) {return new Convertible(); }
+	public static implicit operator Convertible(uint? ui) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		Convertible a = $33$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("ui", c.Method.Parameters[0].Name);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_UseShortResult_BecauseNullableCannotBeUnpacked()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator int?(Test i) { return 0; }
+	public static implicit operator short(Test s) { return 0; }
+}
+class Program {
+	public static void Main(string[] args)
+	{
+		int x = $new Test()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("System.Int16", c.Method.ReturnType.FullName);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_Short_Or_NullableByte_Target()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator short(Test s) { return 0; }
+	public static implicit operator byte?(Test b) { return 0; }
+}
+class Program {
+	public static void Main(string[] args)
+	{
+		int? x = $new Test()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("System.Int16", c.Method.ReturnType.FullName);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_Byte_Or_NullableShort_Target()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator byte(Test b) { return 0; }
+	public static implicit operator short?(Test s) { return 0; }
+}
+class Program {
+	public static void Main(string[] args)
+	{
+		int? x = $new Test()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("s", c.Method.Parameters[0].Name);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_Int_Or_NullableLong_Source()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator Test(int i) { return new Test(); }
+	public static implicit operator Test(long? l) { return new Test(); }
+}
+class Program {
+	static void Main() {
+		short s = 0;
+		Test t = $s$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("i", c.Method.Parameters[0].Name);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_NullableInt_Or_Long_Source()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator Test(int? i) { return new Test(); }
+	public static implicit operator Test(long l) { return new Test(); }
+}
+class Program {
+	static void Main() {
+		short s = 0;
+		Test t = $s$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_NullableInt_Or_Long_Constant_Source() {
+			string program = @"using System;
+class Test {
+	public static implicit operator Test(int? i) { return new Test(); }
+	public static implicit operator Test(long l) { return new Test(); }
+}
+class Program {
+	static void Main() {
+		Test t = $1$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsFalse(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_NullableInt_Or_NullableLong_Source()
+		{
+			string program = @"using System;
+class Test {
+	public static implicit operator Test(int? i) { return new Test(); }
+	public static implicit operator Test(long? l) { return new Test(); }
+}
+class Program {
+	static void Main() {
+		short s = 0;
+		Test t = $s$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.AreEqual("i", c.Method.Parameters[0].Name);
+		}
+		
+		[Test]
+		public void PreferUserDefinedConversionOverReferenceConversion()
+		{
+			// actually this is not because user-defined conversions are better;
+			// but because string is a better conversion target
+			string program = @"
+class AA {
+	public static implicit operator string(AA a) { return null; }
+}
+class Test {
+	static void M(object obj) {}
+	static void M(string str) {}
+	
+	static void Main() {
+		$M(new AA())$;
+	}
+}";
+
+			var rr = Resolve<CSharpInvocationResolveResult>(program);
+			Assert.IsFalse(rr.IsError);
+			Assert.AreEqual("str", rr.Member.Parameters[0].Name);
+		}
+		
+		[Test]
+		public void PreferAmbiguousConversionOverReferenceConversion()
+		{
+			// Ambiguous conversions are a compiler error; but they are not
+			// preventing the overload from being chosen.
+			
+			// The user-defined conversion wins because BB is a better conversion target than object.
+			string program = @"
+class AA {
+	public static implicit operator BB(AA a) { return null; }
+}
+class BB {
+	public static implicit operator BB(AA a) { return null; }
+}
+
+class Test {
+	static void M(BB b) {}
+	static void M(object o) {}
+	
+	static void Main() {
+		M($new AA()$);
+	}
+}";
+
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsUserDefined);
+			Assert.IsFalse(c.IsValid);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_ConversionBeforeUserDefinedOperatorIsCorrect() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator Convertible(long l) {return new Convertible(); }
+}
+class Test {
+	public void M() {
+		int i = 33;
+		Convertible a = $i$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.ConversionBeforeUserDefinedOperator.IsImplicit);
+			Assert.IsTrue(c.ConversionBeforeUserDefinedOperator.IsNumericConversion);
+			Assert.IsTrue(c.ConversionBeforeUserDefinedOperator.IsValid);
+			Assert.IsTrue(c.ConversionAfterUserDefinedOperator.IsIdentityConversion);
+		}
+
+		[Test]
+		public void UserDefinedImplicitConversion_ConversionAfterUserDefinedOperatorIsCorrect() {
+			string program = @"using System;
+class Convertible {
+	public static implicit operator int(Convertible i) {return 0; }
+}
+class Test {
+	public void M() {
+		long a = $new Convertible()$;
+	}
+}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.ConversionBeforeUserDefinedOperator.IsIdentityConversion);
+			Assert.IsTrue(c.ConversionAfterUserDefinedOperator.IsImplicit);
+			Assert.IsTrue(c.ConversionAfterUserDefinedOperator.IsNumericConversion);
+			Assert.IsTrue(c.ConversionAfterUserDefinedOperator.IsValid);
+		}
+		
+		[Test]
+		public void UserDefinedImplicitConversion_IsImplicit()
+		{
+			// Bug icsharpcode/NRefactory#183: conversions from constant expressions were incorrectly marked as explicit
+			string program = @"using System;
+	class Test {
+		void Hello(JsNumber3 x) {
+			Hello($7$);
+		}
+	}
+	public class JsNumber3 {
+		public static implicit operator JsNumber3(int d) {
+			return null;
+		}
+	}";
+			var c = GetConversion(program);
+			Assert.IsTrue(c.IsValid);
+			Assert.IsTrue(c.IsImplicit);
+			Assert.IsFalse(c.IsExplicit);
+			Assert.AreEqual(Conversion.IdentityConversion, c.ConversionBeforeUserDefinedOperator);
+			Assert.AreEqual(Conversion.IdentityConversion, c.ConversionAfterUserDefinedOperator);
+		}
 	}
 }

@@ -54,9 +54,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					Condition = new BinaryOperatorExpression (new IdentifierExpression (parameter.Name), BinaryOperatorType.Equality, new NullReferenceExpression ()),
 					TrueStatement = new ThrowStatement (new ObjectCreateExpression (context.CreateShortType("System", "ArgumentNullException"), new PrimitiveExpression (parameter.Name)))
 				};
-				System.Console.WriteLine(bodyStatement.StartLocation +"/" + bodyStatement.EndLocation);
 				script.AddTo(bodyStatement, statement);
-			});
+			}, parameter.NameToken);
 		}
 
 		static bool HasNullCheck (ParameterDeclaration parameter)

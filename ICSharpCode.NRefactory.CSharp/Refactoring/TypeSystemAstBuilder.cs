@@ -1,5 +1,20 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team (for details please see \doc\copyright.txt)
-// This code is distributed under MIT license (for details please see \doc\license.txt)
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this
+// software and associated documentation files (the "Software"), to deal in the Software
+// without restriction, including without limitation the rights to use, copy, modify, merge,
+// publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+// to whom the Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all copies or
+// substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+// PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+// FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
 
 using System;
 using System.Collections.Generic;
@@ -55,6 +70,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			this.ShowTypeParameterConstraints = true;
 			this.ShowParameterNames = true;
 			this.ShowConstantValues = true;
+			this.UseAliases = true;
 		}
 		
 		/// <summary>
@@ -88,7 +104,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		public bool ShowTypeParameters { get; set; }
 		
 		/// <summary>
-		/// Controls whether contraints on type parameter declarations are shown.
+		/// Controls whether constraints on type parameter declarations are shown.
 		/// Has no effect if ShowTypeParameters is false.
 		/// The default value is <c>true</c>.
 		/// </summary>
@@ -123,6 +139,18 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		/// The default value is <c>false</c>.
 		/// </summary>
 		public bool UseCustomEvents { get; set; }
+
+		/// <summary>
+		/// Controls if unbound type argument names are inserted in the ast or not.
+		/// The default value is <c>false</c>.
+		/// </summary>
+		public bool ConvertUnboundTypeArguments { get; set;}
+
+		/// <summary>
+		/// Controls if aliases should be used inside the type name or not.
+		/// The default value is <c>true</c>.
+		/// </summary>
+		public bool UseAliases { get; set;}
 		#endregion
 		
 		#region Convert Type
@@ -136,17 +164,27 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			return astType;
 		}
 		
-		public AstType ConvertType(string ns, string name, int typeParameterCount = 0)
+		public AstType ConvertType(FullTypeName fullTypeName)
 		{
 			if (resolver != null) {
 				foreach (var asm in resolver.Compilation.Assemblies) {
-					var def = asm.GetTypeDefinition(ns, name, typeParameterCount);
+					var def = asm.GetTypeDefinition(fullTypeName);
 					if (def != null) {
 						return ConvertType(def);
 					}
 				}
 			}
-			return new MemberType(new SimpleType(ns), name);
+			TopLevelTypeName top = fullTypeName.TopLevelTypeName;
+			AstType type;
+			if (string.IsNullOrEmpty(top.Namespace)) {
+				type = new SimpleType(top.Name);
+			} else {
+				type = new SimpleType(top.Namespace).MemberType(top.Name);
+			}
+			for (int i = 0; i < fullTypeName.NestingLevel; i++) {
+				type = type.MemberType(fullTypeName.GetNestedTypeName(i));
+			}
+			return type;
 		}
 		
 		AstType ConvertTypeHelper(IType type)
@@ -202,11 +240,13 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			
 			if (resolver != null) {
 				// Look if there's an alias to the target type
-				for (ResolvedUsingScope usingScope = resolver.CurrentUsingScope; usingScope != null; usingScope = usingScope.Parent) {
-					foreach (var pair in usingScope.UsingAliases) {
-						if (pair.Value is TypeResolveResult) {
-							if (TypeMatches(pair.Value.Type, typeDef, typeArguments))
-								return new SimpleType(pair.Key);
+				if (UseAliases) {
+					for (ResolvedUsingScope usingScope = resolver.CurrentUsingScope; usingScope != null; usingScope = usingScope.Parent) {
+						foreach (var pair in usingScope.UsingAliases) {
+							if (pair.Value is TypeResolveResult) {
+								if (TypeMatches(pair.Value.Type, typeDef, typeArguments))
+									return new SimpleType(pair.Key);
+							}
 						}
 					}
 				}
@@ -220,18 +260,21 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				} else {
 					localTypeArguments = EmptyList<IType>.Instance;
 				}
-				TypeResolveResult trr = resolver.ResolveSimpleName(typeDef.Name, localTypeArguments) as TypeResolveResult;
-				if (trr != null && !trr.IsError && TypeMatches(trr.Type, typeDef, typeArguments)) {
-					// We can use the short type name
-					SimpleType shortResult = new SimpleType(typeDef.Name);
-					AddTypeArguments(shortResult, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
-					return shortResult;
+				ResolveResult rr = resolver.ResolveSimpleName(typeDef.Name, localTypeArguments);
+				TypeResolveResult trr = rr as TypeResolveResult;
+				if (trr != null || (localTypeArguments.Count == 0 && resolver.IsVariableReferenceWithSameType(rr, typeDef.Name, out trr))) {
+					if (!trr.IsError && TypeMatches(trr.Type, typeDef, typeArguments)) {
+						// We can use the short type name
+						SimpleType shortResult = new SimpleType(typeDef.Name);
+						AddTypeArguments(shortResult, typeDef, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
+						return shortResult;
+					}
 				}
 			}
 			
 			if (AlwaysUseShortTypeNames) {
 				var shortResult = new SimpleType(typeDef.Name);
-				AddTypeArguments(shortResult, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
+				AddTypeArguments(shortResult, typeDef, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
 				return shortResult;
 			}
 			MemberType result = new MemberType();
@@ -248,7 +291,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				}
 			}
 			result.MemberName = typeDef.Name;
-			AddTypeArguments(result, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
+			AddTypeArguments(result, typeDef, typeArguments, outerTypeParameterCount, typeDef.TypeParameterCount);
 			return result;
 		}
 		
@@ -279,13 +322,19 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		/// Adds type arguments to the result type.
 		/// </summary>
 		/// <param name="result">The result AST node (a SimpleType or MemberType)</param>
+		/// <param name="typeDef">The type definition that owns the type parameters</param>
 		/// <param name="typeArguments">The list of type arguments</param>
 		/// <param name="startIndex">Index of first type argument to add</param>
 		/// <param name="endIndex">Index after last type argument to add</param>
-		void AddTypeArguments(AstType result, IList<IType> typeArguments, int startIndex, int endIndex)
+		void AddTypeArguments(AstType result, ITypeDefinition typeDef, IList<IType> typeArguments, int startIndex, int endIndex)
 		{
+			Debug.Assert(endIndex <= typeDef.TypeParameterCount);
 			for (int i = startIndex; i < endIndex; i++) {
-				result.AddChild(ConvertType(typeArguments[i]), Roles.TypeArgument);
+				if (ConvertUnboundTypeArguments && typeArguments[i].Kind == TypeKind.UnboundTypeArgument) {
+					result.AddChild(new SimpleType(typeDef.TypeParameters[i].Name), Roles.TypeArgument);
+				} else {
+					result.AddChild(ConvertType(typeArguments[i]), Roles.TypeArgument);
+				}
 			}
 		}
 		
@@ -293,11 +342,13 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			if (resolver != null) {
 				// Look if there's an alias to the target namespace
-				for (ResolvedUsingScope usingScope = resolver.CurrentUsingScope; usingScope != null; usingScope = usingScope.Parent) {
-					foreach (var pair in usingScope.UsingAliases) {
-						NamespaceResolveResult nrr = pair.Value as NamespaceResolveResult;
-						if (nrr != null && nrr.NamespaceName == ns)
-							return new SimpleType(pair.Key);
+				if (UseAliases) {
+					for (ResolvedUsingScope usingScope = resolver.CurrentUsingScope; usingScope != null; usingScope = usingScope.Parent) {
+						foreach (var pair in usingScope.UsingAliases) {
+							NamespaceResolveResult nrr = pair.Value as NamespaceResolveResult;
+							if (nrr != null && nrr.NamespaceName == ns)
+								return new SimpleType(pair.Key);
+						}
 					}
 				}
 			}
@@ -461,7 +512,10 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		
 		EntityDeclaration ConvertTypeDefinition(ITypeDefinition typeDefinition)
 		{
-			Modifiers modifiers = ModifierFromAccessibility(typeDefinition.Accessibility);
+			Modifiers modifiers = Modifiers.None;
+			if (this.ShowAccessibility) {
+				modifiers |= ModifierFromAccessibility(typeDefinition.Accessibility);
+			}
 			if (this.ShowModifiers) {
 				if (typeDefinition.IsStatic) {
 					modifiers |= Modifiers.Static;
@@ -586,7 +640,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			if (GenerateBody) {
 				return new BlockStatement {
-					new ThrowStatement(new ObjectCreateExpression(ConvertType("System", "NotImplementedException")))
+					new ThrowStatement(new ObjectCreateExpression(ConvertType(new TopLevelTypeName("System", "NotImplementedException", 0))))
 				};
 			} else {
 				return BlockStatement.Null;
@@ -598,7 +652,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			if (accessor == null)
 				return Accessor.Null;
 			Accessor decl = new Accessor();
-			if (accessor.Accessibility != ownerAccessibility)
+			if (this.ShowAccessibility && accessor.Accessibility != ownerAccessibility)
 				decl.Modifiers = ModifierFromAccessibility(accessor.Accessibility);
 			decl.Body = GenerateBodyBlock();
 			return decl;
@@ -716,10 +770,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		#endregion
 		
 		#region Convert Modifiers
-		Modifiers ModifierFromAccessibility(Accessibility accessibility)
+		static Modifiers ModifierFromAccessibility(Accessibility accessibility)
 		{
-			if (!this.ShowAccessibility)
-				return Modifiers.None;
 			switch (accessibility) {
 				case Accessibility.Private:
 					return Modifiers.Private;
@@ -740,7 +792,10 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		Modifiers GetMemberModifiers(IMember member)
 		{
 			bool isInterfaceMember = member.DeclaringType.Kind == TypeKind.Interface;
-			Modifiers m = isInterfaceMember ? Modifiers.None : ModifierFromAccessibility(member.Accessibility);
+			Modifiers m = Modifiers.None;
+			if (this.ShowAccessibility && !isInterfaceMember) {
+				m |= ModifierFromAccessibility(member.Accessibility);
+			}
 			if (this.ShowModifiers) {
 				if (member.IsStatic) {
 					m |= Modifiers.Static;

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -20,7 +20,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -33,7 +32,6 @@ using ICSharpCode.NRefactory.CSharp;
 using ICSharpCode.NRefactory.CSharp.Resolver;
 using ICSharpCode.NRefactory.Semantics;
 using ICSharpCode.NRefactory.TypeSystem;
-using ICSharpCode.NRefactory.TypeSystem.Implementation;
 
 namespace ICSharpCode.NRefactory.Demo
 {
@@ -65,7 +63,11 @@ namespace ICSharpCode.NRefactory.Demo
 		
 		void CSharpParseButtonClick(object sender, EventArgs e)
 		{
-			syntaxTree = new CSharpParser().Parse(csharpCodeTextBox.Text, "demo.cs");
+			var parser = new CSharpParser();
+			syntaxTree = parser.Parse(csharpCodeTextBox.Text, "demo.cs");
+			if (parser.HasErrors) {
+				MessageBox.Show(string.Join(Environment.NewLine, parser.Errors.Select(err => err.Message)));
+			}
 			csharpTreeView.Nodes.Clear();
 			foreach (var element in syntaxTree.Children) {
 				csharpTreeView.Nodes.Add(MakeTreeNode(element));
@@ -123,7 +125,7 @@ namespace ICSharpCode.NRefactory.Demo
 			int selectionEnd = selectionStart + csharpCodeTextBox.SelectionLength;
 			foreach (TreeNode t in c) {
 				AstNode node = t.Tag as AstNode;
-				if (node != null
+				if (node != null && !node.StartLocation.IsEmpty && !node.EndLocation.IsEmpty
 				    && selectionStart >= GetOffset(csharpCodeTextBox, node.StartLocation)
 				    && selectionEnd <= GetOffset(csharpCodeTextBox, node.EndLocation))
 				{
@@ -146,7 +148,7 @@ namespace ICSharpCode.NRefactory.Demo
 		
 		void CSharpGenerateCodeButtonClick(object sender, EventArgs e)
 		{
-			csharpCodeTextBox.Text = syntaxTree.GetText();
+			csharpCodeTextBox.Text = syntaxTree.ToString();
 		}
 		
 		int GetOffset(TextBox textBox, TextLocation location)

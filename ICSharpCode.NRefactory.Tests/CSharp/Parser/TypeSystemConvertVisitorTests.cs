@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -36,6 +36,16 @@ namespace ICSharpCode.NRefactory.CSharp.Parser
 		{
 			compilation = ParseTestCase().CreateCompilation();
 		}
+
+		static IProjectContent CreateContent (IUnresolvedFile unresolvedFile)
+		{
+			return new CSharpProjectContent()
+				.AddOrUpdateFiles(unresolvedFile)
+				.AddAssemblyReferences(new[] {
+					CecilLoaderTests.Mscorlib
+				})
+				.SetAssemblyName(typeof(TypeSystemTests).Assembly.GetName().Name);
+		}
 		
 		internal static IProjectContent ParseTestCase()
 		{
@@ -47,11 +57,7 @@ namespace ICSharpCode.NRefactory.CSharp.Parser
 				syntaxTree = parser.Parse(s, fileName);
 			}
 			
-			var unresolvedFile = syntaxTree.ToTypeSystem();
-			return new CSharpProjectContent()
-				.AddOrUpdateFiles(unresolvedFile)
-				.AddAssemblyReferences(new[] { CecilLoaderTests.Mscorlib })
-				.SetAssemblyName(typeof(TypeSystemTests).Assembly.GetName().Name);
+			return CreateContent(syntaxTree.ToTypeSystem());
 		}
 		
 		[Test]
@@ -80,6 +86,35 @@ namespace ICSharpCode.NRefactory.CSharp.Parser
 			var method = t.GetMethods(m => m.Name == "PartialMethodWithoutImplementation").Single();
 			Assert.AreEqual(1, method.Parts.Count);
 		}
+
+		[Test]
+		public void CyclicConstants()
+		{
+			var syntaxTree = SyntaxTree.Parse ("class Test { const int foo = foo; }");
+			syntaxTree.FileName = "a.cs";
+			var content = CreateContent (syntaxTree.ToTypeSystem());
+			var testType = content.CreateCompilation ().MainAssembly.GetTypeDefinition ("", "Test");
+			Assert.NotNull (testType);
+			var field = testType.Fields.First ();
+			Assert.IsTrue (field.IsConst);
+			Assert.IsNull (field.ConstantValue);
+		}
+
+		[Test]
+		public void AssemblyAndModuleAttributesDoNotAppearOnTypes() 
+		{
+			var parser = new CSharpParser();
+			var cu = parser.Parse("[assembly: My1][module: My2][My3]class C {} public class My1Attribute : System.Attribute {} public class My2Attribute : System.Attribute {} public class My3Attribute : System.Attribute {}", "File.cs");
+
+			var ts = cu.ToTypeSystem();
+			var compilation = new CSharpProjectContent()
+				.UpdateProjectContent(null, ts)
+				.AddAssemblyReferences(new[] { CecilLoaderTests.Mscorlib })
+				.CreateCompilation();
+			var type = ReflectionHelper.ParseReflectionName("C").Resolve(compilation).GetDefinition();
+			Assert.That(type.Attributes.Select(a => a.AttributeType.FullName).ToList(), Is.EqualTo(new[] { "My3Attribute" }));
+		}
+
 	}
 	
 	[TestFixture]

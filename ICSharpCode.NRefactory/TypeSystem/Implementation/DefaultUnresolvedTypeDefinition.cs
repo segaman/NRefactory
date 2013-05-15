@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -75,6 +75,29 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			this.UnresolvedFile = declaringTypeDefinition.UnresolvedFile;
 		}
 		
+		protected override void FreezeInternal()
+		{
+			base.FreezeInternal();
+			baseTypes = FreezableHelper.FreezeList(baseTypes);
+			typeParameters = FreezableHelper.FreezeListAndElements(typeParameters);
+			nestedTypes = FreezableHelper.FreezeListAndElements(nestedTypes);
+			members = FreezableHelper.FreezeListAndElements(members);
+		}
+		
+		public override object Clone()
+		{
+			var copy = (DefaultUnresolvedTypeDefinition)base.Clone();
+			if (baseTypes != null)
+				copy.baseTypes = new List<ITypeReference>(baseTypes);
+			if (typeParameters != null)
+				copy.typeParameters = new List<IUnresolvedTypeParameter>(typeParameters);
+			if (nestedTypes != null)
+				copy.nestedTypes = new List<IUnresolvedTypeDefinition>(nestedTypes);
+			if (members != null)
+				copy.members = new List<IUnresolvedMember>(members);
+			return copy;
+		}
+		
 		public TypeKind Kind {
 			get { return kind; }
 			set {
@@ -119,23 +142,17 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		
 		public override string ReflectionName {
 			get {
+				return this.FullTypeName.ReflectionName;
+			}
+		}
+		
+		public FullTypeName FullTypeName {
+			get {
 				IUnresolvedTypeDefinition declaringTypeDef = this.DeclaringTypeDefinition;
 				if (declaringTypeDef != null) {
-					if (this.TypeParameters.Count > declaringTypeDef.TypeParameters.Count) {
-						return declaringTypeDef.ReflectionName + "+" + this.Name + "`" + (this.TypeParameters.Count - declaringTypeDef.TypeParameters.Count).ToString(CultureInfo.InvariantCulture);
-					} else {
-						return declaringTypeDef.ReflectionName + "+" + this.Name;
-					}
-				} else if (string.IsNullOrEmpty(namespaceName)) {
-					if (this.TypeParameters.Count > 0)
-						return this.Name + "`" + this.TypeParameters.Count.ToString(CultureInfo.InvariantCulture);
-					else
-						return this.Name;
+					return declaringTypeDef.FullTypeName.NestedType(this.Name, this.TypeParameters.Count - declaringTypeDef.TypeParameters.Count);
 				} else {
-					if (this.TypeParameters.Count > 0)
-						return namespaceName + "." + this.Name + "`" + this.TypeParameters.Count.ToString(CultureInfo.InvariantCulture);
-					else
-						return namespaceName + "." + this.Name;
+					return new TopLevelTypeName(namespaceName, this.Name, this.TypeParameters.Count);
 				}
 			}
 		}
@@ -203,7 +220,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				throw new ArgumentNullException("context");
 			if (context.CurrentAssembly == null)
 				throw new ArgumentException("An ITypeDefinition cannot be resolved in a context without a current assembly.");
-			return context.CurrentAssembly.GetTypeDefinition(this) 
+			return context.CurrentAssembly.GetTypeDefinition(this.FullTypeName)
 				?? (IType)new UnknownType(this.Namespace, this.Name, this.TypeParameters.Count);
 		}
 		

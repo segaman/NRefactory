@@ -1,6 +1,6 @@
-// 
+﻿// 
 // ImplementAbstractMembersTest.cs
-//  
+//
 // Author:
 //       Mike Krüger <mkrueger@xamarin.com>
 // 
@@ -32,7 +32,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 	[TestFixture]
 	public class ImplementAbstractMembersTest : ContextActionTestBase
 	{
-		[Test()]
+		[Test]
 		public void TestSimpleBaseType()
 		{
 			Test<ImplementAbstractMembersAction>(@"abstract class Simple {
@@ -50,6 +50,144 @@ class Foo : Simple
 {
 	#region implemented abstract members of Simple
 	public override void FooBar (string foo, int bar)
+	{
+		throw new System.NotImplementedException ();
+	}
+	#endregion
+}
+");
+		}
+
+		[Test]
+		public void TestProtectedMembers()
+		{
+			Test<ImplementAbstractMembersAction>(@"abstract class Simple {
+	protected abstract string ServiceName { get; }
+}
+
+class Foo : $Simple
+{
+}
+", @"abstract class Simple {
+	protected abstract string ServiceName { get; }
+}
+
+class Foo : Simple
+{
+	#region implemented abstract members of Simple
+	protected override string ServiceName {
+		get {
+			throw new System.NotImplementedException ();
+		}
+	}
+	#endregion
+}
+");
+		}
+
+		[Test]
+		public void TestProtectedInternalMembers()
+		{
+			Test<ImplementAbstractMembersAction>(@"abstract class Simple {
+	protected internal abstract string ServiceName { get; }
+}
+
+class Foo : $Simple
+{
+}
+", @"abstract class Simple {
+	protected internal abstract string ServiceName { get; }
+}
+
+class Foo : Simple
+{
+	#region implemented abstract members of Simple
+	protected internal override string ServiceName {
+		get {
+			throw new System.NotImplementedException ();
+		}
+	}
+	#endregion
+}
+");
+		}
+	
+	
+		
+		[Test]
+		public void TestAbstractOverride()
+		{
+			Test<ImplementAbstractMembersAction>(@"class A {
+	public virtual void Foo() {
+		Console.WriteLine(""A:Foo()"");
+	}
+}
+
+abstract class B : A {
+	public abstract override void Foo();
+	public abstract void FooBar();
+}
+
+class C : $B
+{
+}
+", @"class A {
+	public virtual void Foo() {
+		Console.WriteLine(""A:Foo()"");
+	}
+}
+
+abstract class B : A {
+	public abstract override void Foo();
+	public abstract void FooBar();
+}
+
+class C : B
+{
+	#region implemented abstract members of B
+	public override void Foo ()
+	{
+		throw new System.NotImplementedException ();
+	}
+	public override void FooBar ()
+	{
+		throw new System.NotImplementedException ();
+	}
+	#endregion
+}
+");
+		}
+
+		
+
+		[Test]
+		public void TestAlreadyImplemented()
+		{
+			Test<ImplementAbstractMembersAction>(@"class A {
+	public abstract void Foo();
+	public abstract void FooBar();
+}
+
+abstract class B : A {
+	public override void Foo() {}
+}
+
+class C : $B
+{
+}
+", @"class A {
+	public abstract void Foo();
+	public abstract void FooBar();
+}
+
+abstract class B : A {
+	public override void Foo() {}
+}
+
+class C : B
+{
+	#region implemented abstract members of A
+	public override void FooBar ()
 	{
 		throw new System.NotImplementedException ();
 	}

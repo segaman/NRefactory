@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -39,11 +39,17 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			base.FreezeInternal();
 		}
 		
-		public override void ApplyInterningProvider(IInterningProvider provider)
+		public override object Clone()
+		{
+			var copy = (DefaultUnresolvedProperty)base.Clone();
+			if (parameters != null)
+				copy.parameters = new List<IUnresolvedParameter>(parameters);
+			return copy;
+		}
+		
+		public override void ApplyInterningProvider(InterningProvider provider)
 		{
 			base.ApplyInterningProvider(provider);
-			getter = provider.Intern(getter);
-			setter = provider.Intern(setter);
 			parameters = provider.InternList(parameters);
 		}
 		

@@ -25,7 +25,7 @@
 // THE SOFTWARE.
 
 
-using ICSharpCode.NRefactory.CSharp.Refactoring.CodeActions;
+using ICSharpCode.NRefactory.CSharp.Refactoring;
 using NUnit.Framework;
 
 namespace ICSharpCode.NRefactory.CSharp.CodeActions
@@ -203,7 +203,7 @@ class TestClass
 {
 	int TestMethod (int i)
 	{
-		if$ (i > 0)
+		$if (i > 0)
 			return 1;
 		return 0;
 	}

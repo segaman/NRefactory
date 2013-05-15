@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -32,11 +32,24 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		ITypeReference returnType = SpecialType.UnknownType;
 		IList<IMemberReference> interfaceImplementations;
 		
-		public override void ApplyInterningProvider(IInterningProvider provider)
+		public override void ApplyInterningProvider(InterningProvider provider)
 		{
 			base.ApplyInterningProvider(provider);
-			returnType = provider.Intern(returnType);
 			interfaceImplementations = provider.InternList(interfaceImplementations);
+		}
+		
+		protected override void FreezeInternal()
+		{
+			base.FreezeInternal();
+			interfaceImplementations = FreezableHelper.FreezeList(interfaceImplementations);
+		}
+		
+		public override object Clone()
+		{
+			var copy = (AbstractUnresolvedMember)base.Clone();
+			if (interfaceImplementations != null)
+				copy.interfaceImplementations = new List<IMemberReference>(interfaceImplementations);
+			return copy;
 		}
 		
 		/*
@@ -56,6 +69,8 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				interfaceImplementations = FreezableHelper.FreezeListAndElements(interfaceImplementations);
 				base.FreezeInternal();
 			}
+			
+			override Clone(){}
 		}
 		
 		internal override AbstractUnresolvedEntity.RareFields WriteRareFields()
@@ -83,20 +98,16 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			}
 		}
 		
-		/*
 		public IList<IMemberReference> ExplicitInterfaceImplementations {
 			get {
+				/*
 				RareFields rareFields = (RareFields)this.rareFields;
 				if (rareFields == null || rareFields.interfaceImplementations == null) {
 					rareFields = (RareFields)WriteRareFields();
 					return rareFields.interfaceImplementations = new List<IMemberReference>();
 				}
 				return rareFields.interfaceImplementations;
-			}
-		}*/
-		
-		public IList<IMemberReference> ExplicitInterfaceImplementations {
-			get {
+				*/
 				if (interfaceImplementations == null)
 					interfaceImplementations = new List<IMemberReference>();
 				return interfaceImplementations;

@@ -587,7 +587,165 @@ class MyTest
 			);
 		}
 
-	}
 
+		/// <summary>
+		/// Bug 7383 - Object initializer completion inaccessible
+		/// </summary>
+		[Test()]
+		public void TestBug7383()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(
+				@"using System.Runtime.InteropServices;
+
+class S
+{
+    public int Foo { get; protected set; }
+    public int Bar { get; set; }
+}
+
+class C
+{
+    public static void Main ()
+    {
+        var s = new S () {
+            $Fo$
+        };
+    }
+}
+
+");
+			Assert.IsNull(provider.Find("Foo"), "'Foo' found.");
+			Assert.IsNotNull(provider.Find("Bar"), "'Bar' not found.");
+		}
+
+		[Test()]
+		public void TestBug7383Case2()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(
+				@"using System.Runtime.InteropServices;
+
+class S
+{
+    public int Foo { get; protected set; }
+    public int Bar { get; set; }
+}
+
+class C : S
+{
+    public static void Main ()
+    {
+        var s = new C () {
+            $Fo$
+        };
+    }
+}
+
+");
+			Assert.IsNotNull(provider.Find("Foo"), "'Foo' found.");
+			Assert.IsNotNull(provider.Find("Bar"), "'Bar' not found.");
+		}
+
+
+		/// <summary>
+		/// Bug 9910 - Completion not working in object initializer
+		/// </summary>
+		[Test]
+		public void TestBug9910()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(
+				@"class Test 
+{
+    Test(int i) { }
+    Test(char c) { }
+
+    static Test foo(dynamic d)
+    {
+        return new Test(d) {
+            $f$
+        };
+    }
+
+    public static void Main(string [] args)
+    {
+    }
+
+    int fld;
+    int fld2;
+}
+
+");
+			Assert.IsNotNull(provider.Find("fld"), "'fld' found.");
+			Assert.IsNotNull(provider.Find("fld2"), "'fld2' not found.");
+		}
+
+
+		/// <summary>
+		/// Bug 9935 - MD shows decimal constants as fields which can be initalized
+		/// </summary>
+		[Test]
+		public void TestBug9935()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(
+				@"class Test 
+{
+   
+    public static void Main(string [] args)
+    {
+		var mm = new decimal () {
+            $M$
+        };
+
+    }
+}
+
+");
+			Assert.IsNull(provider.Find("MaxValue"), "'MaxValue' found.");
+			Assert.IsNull(provider.Find("MinValue"), "'MinValue' found.");
+		}
+
+		[Test]
+		public void TestAnonymousTypes()
+		{
+			CodeCompletionBugTests.CombinedProviderTest(
+				@"class Test 
+{
+   
+    public static void Main(string [] args)
+    {
+		var mm = new {
+            $b$
+        };
+
+    }
+}
+
+", provider => {
+				Assert.IsTrue(provider == null || provider.Count == 0);
+			});
+			
+		}
+
+		[Test]
+		public void TestAnonymousTypesCase2()
+		{
+			CodeCompletionBugTests.CombinedProviderTest(
+				@"class Test 
+{
+   
+    public static void Main(string [] args)
+    {
+		var mm = new {
+            $bar = a$
+        };
+
+    }
+}
+
+", provider => {
+				Assert.IsNotNull(provider.Find("args"), "'args' not found.");
+			});
+			
+		}
+	}
 }
 

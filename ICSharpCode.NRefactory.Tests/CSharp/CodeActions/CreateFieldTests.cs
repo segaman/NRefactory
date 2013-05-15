@@ -209,5 +209,154 @@ class Foo
 				"}", result);
 		}
 
+		[Test()]
+		public void TestObjectInitializer ()
+		{
+			// Not 100% correct input code, but should work in that case as well.
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		new TestClass {
+			$NonExistantProperty = 5
+		};
+	}
+}", @"class TestClass
+{
+	int NonExistantProperty;
+	void TestMethod ()
+	{
+		new TestClass {
+			NonExistantProperty = 5
+		};
+	}
+}");
+		}
+
+		[Test()]
+		public void TestObjectInitializerInStaticMethod ()
+		{
+			// Not 100% correct input code, but should work in that case as well.
+			Test<CreateFieldAction> (@"class TestClass
+{
+	static void TestMethod ()
+	{
+		new TestClass {
+			$NonExistantProperty = 5
+		};
+	}
+}", @"class TestClass
+{
+	int NonExistantProperty;
+	static void TestMethod ()
+	{
+		new TestClass {
+			NonExistantProperty = 5
+		};
+	}
+}");
+		}
+
+		[Test]
+		public void TestIf ()
+		{
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		if ($NonExistantProperty)
+			;
+	}
+}", @"class TestClass
+{
+	bool NonExistantProperty;
+	void TestMethod ()
+	{
+		if (NonExistantProperty)
+			;
+	}
+}");
+		}
+
+		[Test]
+		public void TestWhile ()
+		{
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		while ($NonExistantProperty)
+			;
+	}
+}", @"class TestClass
+{
+	bool NonExistantProperty;
+	void TestMethod ()
+	{
+		while (NonExistantProperty)
+			;
+	}
+}");
+		}
+
+		[Test]
+		public void TestDoWhile ()
+		{
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		do {}
+		while ($NonExistantProperty);
+	}
+}", @"class TestClass
+{
+	bool NonExistantProperty;
+	void TestMethod ()
+	{
+		do {}
+		while (NonExistantProperty);
+	}
+}");
+		}
+
+		[Test]
+		public void TestForCondition ()
+		{
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		for (;$NonExistantProperty;){}
+	}
+}", @"class TestClass
+{
+	bool NonExistantProperty;
+	void TestMethod ()
+	{
+		for (;NonExistantProperty;){}
+	}
+}");
+		}
+
+		[Test]
+		public void TestConditionalOperator ()
+		{
+			Test<CreateFieldAction> (@"class TestClass
+{
+	void TestMethod ()
+	{
+		var b = $NonExistantProperty ? 1 : 0;
+	}
+}", @"class TestClass
+{
+	bool NonExistantProperty;
+	void TestMethod ()
+	{
+		var b = NonExistantProperty ? 1 : 0;
+	}
+}");
+		}
+
 	}
 }

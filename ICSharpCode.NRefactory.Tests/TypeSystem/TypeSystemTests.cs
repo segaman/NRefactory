@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -72,6 +72,8 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			Assert.IsFalse(method.IsStatic);
 			Assert.AreEqual(0, method.Parameters.Count);
 			Assert.AreEqual(0, method.Attributes.Count);
+			Assert.IsTrue(method.HasBody);
+			Assert.IsNull(method.AccessorOwner);
 		}
 		
 		[Test]
@@ -136,8 +138,13 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			ParameterizedType crt = (ParameterizedType)rt.ReferencedType;
 			Assert.AreEqual("System.Collections.Generic.IDictionary", crt.FullName);
 			Assert.AreEqual("System.String", crt.TypeArguments[0].FullName);
-			// ? for NUnit.TestAttribute (because that assembly isn't in ctx)
-			Assert.AreEqual("System.Collections.Generic.IList`1[[?]]", crt.TypeArguments[1].ReflectionName);
+			// we know the name for TestAttribute, but not necessarily the namespace, as NUnit is not in the compilation
+			Assert.AreEqual("System.Collections.Generic.IList", crt.TypeArguments[1].FullName);
+			var testAttributeType = ((ParameterizedType)crt.TypeArguments[1]).TypeArguments.Single();
+			Assert.AreEqual("TestAttribute", testAttributeType.Name);
+			Assert.AreEqual(TypeKind.Unknown, testAttributeType.Kind);
+			// (more accurately, we know the namespace and reflection name if the type was loaded by cecil,
+			// but not if we parsed it from C#)
 		}
 		
 		[Test]
@@ -197,7 +204,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		{
 			var testClass = GetTypeDefinition(typeof(GenericClass<,>));
 			var methodDef = testClass.Methods.Single(me => me.Name == "GetIndex");
-			var m = new SpecializedMethod(methodDef, new TypeParameterSubstitution(
+			var m = methodDef.Specialize(new TypeParameterSubstitution(
 				new[] { compilation.FindType(KnownTypeCode.Int16), compilation.FindType(KnownTypeCode.Int32) },
 				null
 			));
@@ -222,22 +229,30 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			var methodDef = testClass.Methods.Single(me => me.Name == "GetIndex");
 			
 			// GenericClass<B, A>.GetIndex<A>
-			var m1 = new SpecializedMethod(methodDef, new TypeParameterSubstitution(
+			var m1 = methodDef.Specialize(new TypeParameterSubstitution(
 				new[] { testClass.TypeParameters[1], testClass.TypeParameters[0] },
 				new[] { testClass.TypeParameters[0] }
 			));
 			// GenericClass<string, int>.GetIndex<int>
-			var m2 = new SpecializedMethod(m1, new TypeParameterSubstitution(
+			var m2 = m1.Specialize(new TypeParameterSubstitution(
 				new[] { compilation.FindType(KnownTypeCode.Int32), compilation.FindType(KnownTypeCode.String) },
 				null
 			));
 			
 			// GenericClass<string, int>.GetIndex<int>
-			var m12 = new SpecializedMethod(methodDef, new TypeParameterSubstitution(
+			var m12 = methodDef.Specialize(new TypeParameterSubstitution(
 				new[] { compilation.FindType(KnownTypeCode.String), compilation.FindType(KnownTypeCode.Int32) },
 				new[] { compilation.FindType(KnownTypeCode.Int32) }
 			));
 			Assert.AreEqual(m12, m2);
+		}
+		
+		[Test]
+		public void SpecializedMethod_AccessorOwner()
+		{
+			// NRefactory bug #143 - Accessor Owner throws null reference exception in some cases now
+			var method = compilation.FindType(typeof(GenericClass<string, object>)).GetMethods(m => m.Name == "GetIndex").Single();
+			Assert.IsNull(method.AccessorOwner);
 		}
 		
 		[Test]
@@ -247,7 +262,8 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			Assert.AreSame(method.TypeParameters[0], method.Parameters[0].Type);
 			Assert.AreSame(method, method.TypeParameters[0].Owner);
 			Assert.IsInstanceOf<SpecializedMethod>(method);
-			Assert.AreEqual(0, ((SpecializedMethod)method).TypeArguments.Count); // the method itself is not specialized
+			Assert.IsFalse(method.IsParameterized); // the method itself is not specialized
+			Assert.AreEqual(method.TypeParameters, method.TypeArguments);
 			var methodReference = method.ToMemberReference();
 			var resolvedMethod = methodReference.Resolve(compilation.TypeResolveContext);
 			Assert.AreEqual(method, resolvedMethod);
@@ -258,13 +274,13 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		{
 			var genericClass = compilation.FindType(typeof(GenericClass<string, object>));
 			IType[] methodTypeArguments = { DummyTypeParameter.GetMethodTypeParameter(0) };
-			var method = (SpecializedMethod)genericClass.GetMethods(methodTypeArguments, m => m.Name == "GetIndex").Single();
+			var method = genericClass.GetMethods(methodTypeArguments, m => m.Name == "GetIndex").Single();
 			// GenericClass<string,object>.GetIndex<!!0>()
 			Assert.AreSame(method, method.TypeParameters[0].Owner);
 			Assert.AreNotEqual(method.TypeParameters[0], method.TypeArguments[0]);
 			Assert.IsNull(((ITypeParameter)method.TypeArguments[0]).Owner);
 			// Now apply identity substitution:
-			var method2 = new SpecializedMethod(method, TypeParameterSubstitution.Identity);
+			var method2 = method.Specialize(TypeParameterSubstitution.Identity);
 			Assert.AreSame(method2, method2.TypeParameters[0].Owner);
 			Assert.AreNotEqual(method2.TypeParameters[0], method2.TypeArguments[0]);
 			Assert.IsNull(((ITypeParameter)method2.TypeArguments[0]).Owner);
@@ -318,6 +334,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			Assert.AreEqual(Accessibility.Public, p.Accessibility);
 			Assert.AreEqual(Accessibility.Public, p.Getter.Accessibility);
 			Assert.AreEqual(Accessibility.Private, p.Setter.Accessibility);
+			Assert.IsTrue(p.Getter.HasBody);
 		}
 		
 		[Test]
@@ -598,6 +615,18 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			Assert.AreEqual(0, p.Attributes.Count);
 			Assert.AreEqual(4, p.ConstantValue);
 		}
+
+		[Test]
+		public void MethodWithExplicitOptionalParameter()
+		{
+			IParameter p = GetTypeDefinition(typeof(ParameterTests)).Methods.Single(m => m.Name == "MethodWithExplicitOptionalParameter").Parameters.Single();
+			Assert.IsTrue(p.IsOptional);
+			Assert.IsFalse(p.IsRef);
+			Assert.IsFalse(p.IsOut);
+			Assert.IsFalse(p.IsParams);
+			// explicit optional parameter appears in type system if it's read from C#, but not when read from IL
+			//Assert.AreEqual(1, p.Attributes.Count);
+		}
 		
 		[Test]
 		public void MethodWithEnumOptionalParameter()
@@ -658,34 +687,6 @@ namespace ICSharpCode.NRefactory.TypeSystem
 		}
 		
 		[Test]
-		public void ConstantAnswer()
-		{
-			ITypeDefinition type = GetTypeDefinition(typeof(ConstantTest));
-			IField answer = type.Fields.Single(f => f.Name == "Answer");
-			Assert.IsTrue(answer.IsConst);
-			Assert.IsTrue(answer.IsStatic);
-			Assert.AreEqual(42, answer.ConstantValue);
-		}
-		
-		[Test]
-		public void ConstantEnumFromAnotherAssembly()
-		{
-			ITypeDefinition type = GetTypeDefinition(typeof(ConstantTest));
-			IField answer = type.Fields.Single(f => f.Name == "EnumFromAnotherAssembly");
-			Assert.IsTrue(answer.IsConst);
-			Assert.AreEqual((int)StringComparison.OrdinalIgnoreCase, answer.ConstantValue);
-		}
-		
-		[Test]
-		public void ConstantNullString()
-		{
-			ITypeDefinition type = GetTypeDefinition(typeof(ConstantTest));
-			IField answer = type.Fields.Single(f => f.Name == "NullString");
-			Assert.IsTrue(answer.IsConst);
-			Assert.IsNull(answer.ConstantValue);
-		}
-		
-		[Test]
 		public void InnerClassInGenericClassIsReferencedUsingParameterizedType()
 		{
 			ITypeDefinition type = GetTypeDefinition(typeof(OuterGeneric<>));
@@ -712,10 +713,12 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			Assert.AreEqual(true, p.Getter.IsOverridable);
 			Assert.AreEqual(false, p.Getter.IsOverride);
 			Assert.AreEqual(true, p.Getter.IsPublic);
+			Assert.AreEqual(false, p.Getter.HasBody);
 			Assert.AreEqual(true, p.Setter.IsAbstract);
 			Assert.AreEqual(true, p.Setter.IsOverridable);
 			Assert.AreEqual(false, p.Setter.IsOverride);
 			Assert.AreEqual(true, p.Setter.IsPublic);
+			Assert.AreEqual(false, p.Setter.HasBody);
 
 			type = GetTypeDefinition(typeof(IInterfaceWithIndexers));
 			p = type.Properties.Single(x => x.Parameters.Count == 2);
@@ -785,6 +788,8 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			ITypeDefinition type = GetTypeDefinition(typeof(ParamsAttribute));
 			var arr = (ArrayCreateResolveResult)type.Attributes.Single().PositionalArguments.Single();
 			Assert.AreEqual(5, arr.InitializerElements.Count);
+			Assert.AreEqual(1, arr.SizeArguments.Count);
+			Assert.AreEqual(5, arr.SizeArguments[0].ConstantValue);
 			return arr.InitializerElements[index];
 		}
 		
@@ -1195,6 +1200,138 @@ namespace ICSharpCode.NRefactory.TypeSystem
 			ITypeDefinition type = GetTypeDefinition(typeof(IndexerNonDefaultName));
 			var indexer = type.GetProperties(p => p.IsIndexer).Single();
 			Assert.AreEqual("Foo", indexer.Name);
+		}
+
+		[Test]
+		public void TestNullableDefaultParameter()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ClassWithMethodThatHasNullableDefaultParameter));
+			var method = type.GetMethods ().Single (m => m.Name == "Foo");
+			Assert.AreEqual(42, method.Parameters.Single ().ConstantValue);
+		}
+		
+		[Test]
+		public void AccessibilityTests()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(AccessibilityTest));
+			Assert.AreEqual(Accessibility.Public, type.Methods.Single(m => m.Name == "Public").Accessibility);
+			Assert.AreEqual(Accessibility.Internal, type.Methods.Single(m => m.Name == "Internal").Accessibility);
+			Assert.AreEqual(Accessibility.ProtectedOrInternal, type.Methods.Single(m => m.Name == "ProtectedInternal").Accessibility);
+			Assert.AreEqual(Accessibility.ProtectedOrInternal, type.Methods.Single(m => m.Name == "InternalProtected").Accessibility);
+			Assert.AreEqual(Accessibility.Protected, type.Methods.Single(m => m.Name == "Protected").Accessibility);
+			Assert.AreEqual(Accessibility.Private, type.Methods.Single(m => m.Name == "Private").Accessibility);
+			Assert.AreEqual(Accessibility.Private, type.Methods.Single(m => m.Name == "None").Accessibility);
+		}
+
+		private void AssertConstantField<T>(ITypeDefinition type, string name, T expected) {
+			var f = type.GetFields().Single(x => x.Name == name);
+			Assert.IsTrue(f.IsConst);
+			Assert.AreEqual(expected, f.ConstantValue);
+		}
+
+		[Test]
+		public unsafe void ConstantFields()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ConstantFieldTest));
+			AssertConstantField<byte>(type, "Cb", 42);
+			AssertConstantField<sbyte>(type, "Csb", 42);
+			AssertConstantField<char>(type, "Cc", '\x42');
+			AssertConstantField<short>(type, "Cs", 42);
+			AssertConstantField<ushort>(type, "Cus", 42);
+			AssertConstantField<int>(type, "Ci", 42);
+			AssertConstantField<uint>(type, "Cui", 42);
+			AssertConstantField<long>(type, "Cl", 42);
+			AssertConstantField<ulong>(type, "Cul", 42);
+			AssertConstantField<double>(type, "Cd", 42);
+			AssertConstantField<float>(type, "Cf", 42);
+			AssertConstantField<decimal>(type, "Cm", 42);
+			AssertConstantField<string>(type, "S", "hello, world");
+			AssertConstantField<string>(type, "NullString", null);
+		}
+		
+		[Test]
+		public void ConstantFieldsSizeOf()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ConstantFieldTest));
+			AssertConstantField<int>(type, "SOsb", sizeof(sbyte));
+			AssertConstantField<int>(type, "SOb", sizeof(byte));
+			AssertConstantField<int>(type, "SOs", sizeof(short));
+			AssertConstantField<int>(type, "SOus", sizeof(ushort));
+			AssertConstantField<int>(type, "SOi", sizeof(int));
+			AssertConstantField<int>(type, "SOui", sizeof(uint));
+			AssertConstantField<int>(type, "SOl", sizeof(long));
+			AssertConstantField<int>(type, "SOul", sizeof(ulong));
+			AssertConstantField<int>(type, "SOc", sizeof(char));
+			AssertConstantField<int>(type, "SOf", sizeof(float));
+			AssertConstantField<int>(type, "SOd", sizeof(double));
+			AssertConstantField<int>(type, "SObl", sizeof(bool));
+			AssertConstantField<int>(type, "SOe", sizeof(MyEnum));
+		}
+		
+		[Test]
+		public void ConstantEnumFromThisAssembly()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ConstantFieldTest));
+			IField field = type.Fields.Single(f => f.Name == "EnumFromThisAssembly");
+			Assert.IsTrue(field.IsConst);
+			Assert.AreEqual((short)MyEnum.Second, field.ConstantValue);
+		}
+		
+		[Test]
+		public void ConstantEnumFromAnotherAssembly()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ConstantFieldTest));
+			IField field = type.Fields.Single(f => f.Name == "EnumFromAnotherAssembly");
+			Assert.IsTrue(field.IsConst);
+			Assert.AreEqual((int)StringComparison.OrdinalIgnoreCase, field.ConstantValue);
+		}
+		
+		[Test]
+		public void DefaultOfEnum()
+		{
+			ITypeDefinition type = GetTypeDefinition(typeof(ConstantFieldTest));
+			IField field = type.Fields.Single(f => f.Name == "DefaultOfEnum");
+			Assert.IsTrue(field.IsConst);
+			Assert.AreEqual((short)default(MyEnum), field.ConstantValue);
+		}
+		
+		[Test]
+		public void ExplicitImplementation()
+		{
+			var type = GetTypeDefinition(typeof(ExplicitImplementationTests));
+			var itype = GetTypeDefinition(typeof(IExplicitImplementationTests));
+
+			var methods = type.GetMethods(m => m.Name == "M").ToList();
+			var imethod = itype.GetMethods(m => m.Name == "M").Single();
+			Assert.That(methods.Select(m => m.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(methods.SelectMany(m => m.ImplementedInterfaceMembers).Single(), imethod);
+
+			var properties = type.GetProperties(p => p.Name == "P").ToList();
+			var iproperty  = itype.GetProperties(m => m.Name == "P").Single();
+			Assert.That(properties.Select(p => p.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(properties.SelectMany(p => p.ImplementedInterfaceMembers).Single(), iproperty);
+			Assert.That(properties.Select(p => p.Getter.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(properties.SelectMany(p => p.Getter.ImplementedInterfaceMembers).Single(), iproperty.Getter);
+			Assert.That(properties.Select(p => p.Setter.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(properties.SelectMany(p => p.Setter.ImplementedInterfaceMembers).Single(), iproperty.Setter);
+
+			var indexers = type.GetProperties(p => p.Name == "Item").ToList();
+			var iindexer = itype.GetProperties(m => m.Name == "Item").Single();
+			Assert.That(indexers.Select(p => p.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(indexers.SelectMany(p => p.ImplementedInterfaceMembers).Single(), iindexer);
+			Assert.That(indexers.Select(p => p.Getter.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(indexers.SelectMany(p => p.Getter.ImplementedInterfaceMembers).Single(), iindexer.Getter);
+			Assert.That(indexers.Select(p => p.Setter.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(indexers.SelectMany(p => p.Setter.ImplementedInterfaceMembers).Single(), iindexer.Setter);
+
+			var events = type.GetEvents(e => e.Name == "E").ToList();
+			var ievent = itype.GetEvents(m => m.Name == "E").Single();
+			Assert.That(events.Select(e => e.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(events.SelectMany(e => e.ImplementedInterfaceMembers).Single(), ievent);
+			Assert.That(events.Select(e => e.AddAccessor.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(events.SelectMany(e => e.AddAccessor.ImplementedInterfaceMembers).Single(), ievent.AddAccessor);
+			Assert.That(events.Select(e => e.RemoveAccessor.ImplementedInterfaceMembers.Count).ToList(), Is.EquivalentTo(new[] { 0, 1 }));
+			Assert.AreEqual(events.SelectMany(e => e.RemoveAccessor.ImplementedInterfaceMembers).Single(), ievent.RemoveAccessor);
 		}
 	}
 }

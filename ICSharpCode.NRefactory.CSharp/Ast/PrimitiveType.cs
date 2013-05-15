@@ -97,13 +97,13 @@ namespace ICSharpCode.NRefactory.CSharp
 			PrimitiveType o = other as PrimitiveType;
 			return o != null && MatchString(this.Keyword, o.Keyword);
 		}
-		
-		public override string ToString()
+
+		public override string ToString(CSharpFormattingOptions formattingOptions)
 		{
 			return Keyword;
 		}
 		
-		public override ITypeReference ToTypeReference(NameLookupMode lookupMode = NameLookupMode.Type)
+		public override ITypeReference ToTypeReference(NameLookupMode lookupMode, InterningProvider interningProvider = null)
 		{
 			KnownTypeCode typeCode = GetTypeCodeForPrimitiveType(this.Keyword);
 			if (typeCode == KnownTypeCode.None)

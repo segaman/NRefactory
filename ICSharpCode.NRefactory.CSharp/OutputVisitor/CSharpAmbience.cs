@@ -1,4 +1,4 @@
-// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -20,7 +20,6 @@ using System;
 using System.IO;
 using ICSharpCode.NRefactory.CSharp.Refactoring;
 using ICSharpCode.NRefactory.TypeSystem;
-using ICSharpCode.NRefactory.TypeSystem.Implementation;
 
 namespace ICSharpCode.NRefactory.CSharp
 {
@@ -248,7 +247,7 @@ namespace ICSharpCode.NRefactory.CSharp
 		{
 			TypeSystemAstBuilder astBuilder = CreateAstBuilder();
 			AstNode astNode = astBuilder.ConvertVariable(v);
-			return astNode.GetText().TrimEnd(';', '\r', '\n');
+			return astNode.ToString().TrimEnd(';', '\r', '\n');
 		}
 		
 		public string ConvertType(IType type)
@@ -258,7 +257,7 @@ namespace ICSharpCode.NRefactory.CSharp
 			
 			TypeSystemAstBuilder astBuilder = CreateAstBuilder();
 			AstType astType = astBuilder.ConvertType(type);
-			return astType.GetText();
+			return astType.ToString();
 		}
 		
 		public void ConvertType(IType type, IOutputFormatter formatter, CSharpFormattingOptions formattingPolicy)
@@ -266,6 +265,11 @@ namespace ICSharpCode.NRefactory.CSharp
 			TypeSystemAstBuilder astBuilder = CreateAstBuilder();
 			AstType astType = astBuilder.ConvertType(type);
 			astType.AcceptVisitor(new CSharpOutputVisitor(formatter, formattingPolicy));
+		}
+		
+		public string ConvertConstantValue(object constantValue)
+		{
+			return CSharpOutputVisitor.PrintPrimitiveValue(constantValue);
 		}
 		
 		public string WrapComment(string comment)

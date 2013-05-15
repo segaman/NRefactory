@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -51,6 +51,7 @@ public class Form1 {
 			AttributeSection decl = ParseUtilCSharp.ParseGlobal<AttributeSection>(program);
 			Assert.AreEqual(new TextLocation(1, 1), decl.StartLocation);
 			Assert.AreEqual("assembly", decl.AttributeTarget);
+			Assert.AreEqual(SyntaxTree.MemberRole, decl.Role);
 		}
 		
 		[Test]
@@ -60,6 +61,7 @@ public class Form1 {
 			AttributeSection decl = ParseUtilCSharp.ParseGlobal<AttributeSection>(program);
 			Assert.AreEqual(new TextLocation(1, 1), decl.StartLocation);
 			Assert.AreEqual("module", decl.AttributeTarget);
+			Assert.AreEqual(SyntaxTree.MemberRole, decl.Role);
 		}
 		
 		[Test]

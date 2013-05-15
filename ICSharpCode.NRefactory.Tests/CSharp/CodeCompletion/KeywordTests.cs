@@ -145,9 +145,25 @@ class Test
 		public void GetSetKeywordTest ()
 		{
 			CodeCompletionBugTests.CombinedProviderTest (
-@"class Test
+				@"class Test
 {
 	public int MyProperty {
+		$g$
+}
+", provider => {
+				Assert.IsNotNull (provider.Find ("public"), "keyword 'public' not found.");
+				Assert.IsNotNull (provider.Find ("get"), "keyword 'get' not found.");
+				Assert.IsNotNull (provider.Find ("set"), "keyword 'set' not found.");
+			});
+		}
+
+		[Test()]
+		public void GetSetKeywordIndexerCaseTest ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (
+				@"class Test
+{
+	public int this[int i] {
 		$g$
 }
 ", provider => {
@@ -473,7 +489,7 @@ class Test
 		}
 		
 		
-		[Test()]
+		[Test]
 		public void ForeachInKeywordTest ()
 		{
 			CodeCompletionBugTests.CombinedProviderTest (
@@ -489,6 +505,74 @@ class Test
 				// Either empty list or in - both behaviours are ok.
 				if (provider.Count > 0)
 					Assert.IsNotNull (provider.Find ("in"), "keyword 'in' not found.");
+			});
+		}
+
+		[Test]
+		public void OverrideCompletionDeclarationBeginTest ()
+		{
+			var start = @"class A { public virtual void FooBar () {} }
+class Test : A
+{
+	";
+			var provider = CodeCompletionBugTests.CreateProvider (start + "$override $\n}");
+			
+			var data = provider.Find("FooBar") as CodeCompletionBugTests.TestFactory.OverrideCompletionData;
+			Assert.AreEqual(start.Length, data.DeclarationBegin);
+		}
+
+		[Test]
+		public void PartialCompletionDeclarationBeginTest ()
+		{
+			var start = @"partial class A { partial void FooBar (); }
+partial class A
+{
+	";
+			var provider = CodeCompletionBugTests.CreateProvider (start + "$partial $\n}");
+			
+			var data = provider.Find("FooBar") as CodeCompletionBugTests.TestFactory.OverrideCompletionData;
+			Assert.AreEqual(start.Length, data.DeclarationBegin);
+		}
+
+		[Test]
+		public void IsTypeKeywordTest ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (
+				@"using System;
+class Test
+{
+public void Method ()
+{
+void TestMe (object o)
+{
+if (o is $s$
+}
+}
+}
+", (provider) => {
+				Assert.IsNotNull (provider, "provider == null");
+				Assert.IsNotNull (provider.Find ("string"), "keyword 'string' not found.");
+			});
+		}
+
+		[Test]
+		public void AsTypeKeywordTest ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (
+				@"using System;
+class Test
+{
+public void Method ()
+{
+void TestMe (object o)
+{
+if (o as $s$
+}
+}
+}
+", (provider) => {
+				Assert.IsNotNull (provider, "provider == null");
+				Assert.IsNotNull (provider.Find ("string"), "keyword 'string' not found.");
 			});
 		}
 	}

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -96,6 +96,37 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 		public void OverflowingCastToEnum()
 		{
 			AssertError(typeof(StringComparison), resolver.WithCheckForOverflow(true).ResolveCast(ResolveType(typeof(StringComparison)), MakeConstant(long.MaxValue)));
+		}
+		
+		[Test]
+		public void ImplicitCastInConstant()
+		{
+			string program = @"using System;
+class Test {
+	const int $MAXSIZE = ushort.MaxValue;
+}";
+			var rr = ResolveAtLocation<MemberResolveResult>(program);
+			IField field = (IField)rr.Member;
+			Assert.IsTrue(field.IsConst);
+			Assert.AreEqual("System.Int32", field.Type.FullName);
+			Assert.AreEqual(typeof(int), field.ConstantValue.GetType());
+			Assert.AreEqual(ushort.MaxValue, (int)field.ConstantValue);
+		}
+		
+		[Test]
+		public void ImplicitCastInLocalConstant()
+		{
+			string program = @"using System;
+class Test {
+	void M() {
+		const int $MAXSIZE = ushort.MaxValue;
+	}
+}";
+			var rr = ResolveAtLocation<LocalResolveResult>(program);
+			Assert.IsTrue(rr.Variable.IsConst);
+			Assert.AreEqual("System.Int32", rr.Variable.Type.FullName);
+			Assert.AreEqual(typeof(int), rr.Variable.ConstantValue.GetType());
+			Assert.AreEqual(ushort.MaxValue, (int)rr.Variable.ConstantValue);
 		}
 	}
 }

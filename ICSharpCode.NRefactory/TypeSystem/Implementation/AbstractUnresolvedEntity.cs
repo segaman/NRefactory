@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -63,8 +63,9 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		internal const ushort FlagFieldIsVolatile = 0x2000;
 		// flags for DefaultMethod:
 		internal const ushort FlagExtensionMethod = 0x1000;
-		internal const ushort FlagPartialMethodDeclaration = 0x2000;
-		internal const ushort FlagPartialMethodImplemenation = 0x4000;
+		internal const ushort FlagPartialMethod = 0x2000;
+		internal const ushort FlagHasBody = 0x4000;
+		internal const ushort FlagAsyncMethod = 0x8000;
 		
 		public bool IsFrozen {
 			get { return flags[FlagFrozen]; }
@@ -85,7 +86,13 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				rareFields.FreezeInternal();
 		}
 		
-		public virtual void ApplyInterningProvider(IInterningProvider provider)
+		/// <summary>
+		/// Uses the specified interning provider to intern
+		/// strings and lists in this entity.
+		/// This method does not test arbitrary objects to see if they implement ISupportsInterning;
+		/// instead we assume that those are interned immediately when they are created (before they are added to this entity).
+		/// </summary>
+		public virtual void ApplyInterningProvider(InterningProvider provider)
 		{
 			if (provider == null)
 				throw new ArgumentNullException("provider");
@@ -94,6 +101,23 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			attributes = provider.InternList(attributes);
 			if (rareFields != null)
 				rareFields.ApplyInterningProvider(provider);
+		}
+		
+		/// <summary>
+		/// Creates a shallow clone of this entity.
+		/// Collections (e.g. a type's member list) will be cloned as well, but the elements
+		/// of said list will not be.
+		/// If this instance is frozen, the clone will be unfrozen.
+		/// </summary>
+		public virtual object Clone()
+		{
+			var copy = (AbstractUnresolvedEntity)MemberwiseClone();
+			copy.flags[FlagFrozen] = false;
+			if (attributes != null)
+				copy.attributes = new List<IUnresolvedAttribute>(attributes);
+			if (rareFields != null)
+				copy.rareFields = (RareFields)rareFields.Clone();
+			return copy;
 		}
 		
 		[Serializable]
@@ -107,8 +131,13 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			{
 			}
 			
-			public virtual void ApplyInterningProvider(IInterningProvider provider)
+			public virtual void ApplyInterningProvider(InterningProvider provider)
 			{
+			}
+			
+			public virtual object Clone()
+			{
+				return MemberwiseClone();
 			}
 		}
 		

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -97,7 +97,7 @@ namespace ICSharpCode.NRefactory.CSharp.TypeSystem
 					CSharpResolver resolver = new CSharpResolver(parentContext.WithUsingScope(this));
 					foreach (var u in usingScope.Usings) {
 						INamespace ns = u.ResolveNamespace(resolver);
-						if (ns != null)
+						if (ns != null && !result.Contains(ns))
 							result.Add(ns);
 					}
 					return LazyInit.GetOrSet(ref this.usings, new ReadOnlyCollection<INamespace>(result));
@@ -116,9 +116,15 @@ namespace ICSharpCode.NRefactory.CSharp.TypeSystem
 					CSharpResolver resolver = new CSharpResolver(parentContext.WithUsingScope(this));
 					result = new KeyValuePair<string, ResolveResult>[usingScope.UsingAliases.Count];
 					for (int i = 0; i < result.Count; i++) {
+						var rr = usingScope.UsingAliases[i].Value.Resolve(resolver);
+						if (rr is TypeResolveResult) {
+							rr = new AliasTypeResolveResult (usingScope.UsingAliases[i].Key, (TypeResolveResult)rr);
+						} else if (rr is NamespaceResolveResult) {
+							rr = new AliasNamespaceResolveResult (usingScope.UsingAliases[i].Key, (NamespaceResolveResult)rr);
+						}
 						result[i] = new KeyValuePair<string, ResolveResult>(
 							usingScope.UsingAliases[i].Key,
-							usingScope.UsingAliases[i].Value.Resolve(resolver)
+							rr
 						);
 					}
 					return LazyInit.GetOrSet(ref this.usingAliases, result);
@@ -176,7 +182,7 @@ namespace ICSharpCode.NRefactory.CSharp.TypeSystem
 				get { return EmptyList<IAssembly>.Instance; }
 			}
 			
-			ICompilation IResolved.Compilation {
+			ICompilation ICompilationProvider.Compilation {
 				get { return parentNamespace.Compilation; }
 			}
 			

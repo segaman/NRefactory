@@ -414,8 +414,25 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			Documentation,
 			InactiveCode
 		}
+
+		public class SpecialVisitor
+		{
+			public virtual void Visit (Comment comment)
+			{
+			}
+			public virtual void Visit (NewLineToken newLineToken)
+			{
+			}
+			public virtual void Visit (PreProcessorDirective preProcessorDirective)
+			{
+			}
+		}
+		public abstract class SpecialBase
+		{
+			public abstract void Accept (SpecialVisitor visitor);
+		}
 		
-		public class Comment
+		public class Comment : SpecialBase
 		{
 			public readonly CommentType CommentType;
 			public readonly bool StartsLine;
@@ -440,9 +457,53 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			{
 				return string.Format ("[Comment: CommentType={0}, Line={1}, Col={2}, EndLine={3}, EndCol={4}, Content={5}]", CommentType, Line, Col, EndLine, EndCol, Content);
 			}
+
+			public override void Accept (SpecialVisitor visitor)
+			{
+				visitor.Visit (this);
+			}
 		}
-		
-		public class PreProcessorDirective
+
+		public class NewLineToken : SpecialBase
+		{
+			public readonly int Line;
+			public readonly int Col;
+			public readonly NewLine NewLine;
+
+			public NewLineToken (int line, int col, NewLine newLine)
+			{
+				this.Line = line;
+				this.Col = col;
+				this.NewLine = newLine;
+			}
+
+			public override void Accept (SpecialVisitor visitor)
+			{
+				visitor.Visit (this);
+			}
+		}
+
+		public class PragmaPreProcessorDirective : PreProcessorDirective
+		{
+			public bool Disalbe { get; set; }
+			public List<int> Codes = new List<int> ();
+
+			public PragmaPreProcessorDirective (int line, int col, int endLine, int endCol, Tokenizer.PreprocessorDirective cmd, string arg) : base (line, col, endLine, endCol, cmd, arg)
+			{
+			}
+		}
+
+		public class LineProcessorDirective : PreProcessorDirective
+		{
+			public int LineNumber { get; set; }
+			public string FileName { get; set; }
+
+			public LineProcessorDirective (int line, int col, int endLine, int endCol, Tokenizer.PreprocessorDirective cmd, string arg) : base (line, col, endLine, endCol, cmd, arg)
+			{
+			}
+		}
+
+		public class PreProcessorDirective : SpecialBase
 		{
 			public readonly int Line;
 			public readonly int Col;
@@ -464,13 +525,18 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 				this.Arg = arg;
 			}
 			
+			public override void Accept (SpecialVisitor visitor)
+			{
+				visitor.Visit (this);
+			}
+
 			public override string ToString ()
 			{
 				return string.Format ("[PreProcessorDirective: Line={0}, Col={1}, EndLine={2}, EndCol={3}, Cmd={4}, Arg={5}]", Line, Col, EndLine, EndCol, Cmd, Arg);
 			}
 		}
 		
-		public readonly List<object> Specials = new List<object> ();
+		public readonly List<SpecialBase> Specials = new List<SpecialBase> ();
 		
 		CommentType curComment;
 		bool startsLine;
@@ -516,7 +582,48 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 		{
 			if (inComment)
 				EndComment (startLine, startCol);
-			Specials.Add (new PreProcessorDirective (startLine, startCol, endLine, endColumn, cmd, arg));
+			switch (cmd) {
+			case Tokenizer.PreprocessorDirective.Pragma:
+				Specials.Add (new PragmaPreProcessorDirective (startLine, startCol, endLine, endColumn, cmd, arg));
+				break;
+			case Tokenizer.PreprocessorDirective.Line:
+				Specials.Add (new LineProcessorDirective (startLine, startCol, endLine, endColumn, cmd, arg));
+				break;
+			default:
+				Specials.Add (new PreProcessorDirective (startLine, startCol, endLine, endColumn, cmd, arg));
+				break;
+			}
+		}
+
+		[Conditional ("FULL_AST")]
+		public void SetPragmaDisable(bool disable)
+		{
+			var pragmaDirective = Specials [Specials.Count - 1] as PragmaPreProcessorDirective;
+			if (pragmaDirective == null)
+				return;
+			pragmaDirective.Disalbe = disable;
+		}
+
+		[Conditional ("FULL_AST")]
+		public void AddPragmaCode(int code)
+		{
+			var pragmaDirective = Specials [Specials.Count - 1] as PragmaPreProcessorDirective;
+			if (pragmaDirective == null)
+				return;
+			pragmaDirective.Codes.Add (code);
+		}
+
+		public LineProcessorDirective GetCurrentLineProcessorDirective()
+		{
+			return Specials [Specials.Count - 1] as LineProcessorDirective;
+		}
+
+		public enum NewLine { Unix, Windows }
+
+		[Conditional ("FULL_AST")]
+		public void AddNewLine (int line, int col, NewLine newLine)
+		{
+			Specials.Add (new NewLineToken (line, col, newLine));
 		}
 
 		public void SkipIf ()
@@ -543,6 +650,31 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			{
 				Modifiers = mods;
 				locations = locs != null ?  new List<Location> (locs) : null;
+/*
+			public readonly IList<Tuple<Modifiers, Location>> Modifiers;
+			List<Location> locations;
+
+			public MemberLocations (IList<Tuple<Modifiers, Location>> mods)
+			{
+				Modifiers = mods;
+			}
+
+			public MemberLocations (IList<Tuple<Modifiers, Location>> mods, Location loc)
+				: this (mods)
+			{
+				AddLocations (loc);
+			}
+
+			public MemberLocations (IList<Tuple<Modifiers, Location>> mods, Location[] locs)
+				: this (mods)
+			{
+				AddLocations (locs);
+			}
+
+			public MemberLocations (IList<Tuple<Modifiers, Location>> mods, List<Location> locs)
+				: this (mods)
+			{
+				locations = locs;*/
 			}
 
 			#region Properties
@@ -561,6 +693,15 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 
 			#endregion
 
+			public void AddLocations (Location loc)
+			{
+				if (locations == null) {
+					locations = new List<Location> ();
+				}
+
+				locations.Add (loc);
+			}
+
 			public void AddLocations (params Location[] additional)
 
 			{
@@ -573,7 +714,7 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 				if (additional == null)
 					return;
 				if (locations == null) {
-					locations = new List<Location>(additional);
+					locations = new List<Location> (additional);
 				} else {
 					locations.AddRange (additional);
 				}
@@ -585,7 +726,7 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			private set;
 		}
 
-		Dictionary<object, List<Location>> simple_locs = new Dictionary<object,  List<Location>> (ReferenceEquality<object>.Default);
+		Dictionary<object, List<Location>> simple_locs = new Dictionary<object, List<Location>> (ReferenceEquality<object>.Default);
 		Dictionary<MemberCore, MemberLocations> member_locs = new Dictionary<MemberCore, MemberLocations> (ReferenceEquality<MemberCore>.Default);
 
 		[Conditional ("FULL_AST")]
@@ -599,7 +740,24 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 		{
 			if (element == null || locations == null)
 				return;
-			simple_locs.Add (element, new List<Location> (locations));
+			List<Location> found;
+			if (!simple_locs.TryGetValue (element, out found)) {
+				simple_locs.Add (element, new List<Location> (locations));
+				return;
+			}
+			found.AddRange(locations);
+		}
+
+		[Conditional ("FULL_AST")]
+		public void InsertLocation (object element, int index, Location location)
+		{
+			List<Location> found;
+			if (!simple_locs.TryGetValue (element, out found)) {
+				found = new List<Location> ();
+				simple_locs.Add (element, found);
+			}
+
+			found.Insert (index, location);
 		}
 
 		[Conditional ("FULL_AST")]
@@ -627,6 +785,7 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			}
 			member_locs.Add (member, new MemberLocations (modLocations, locations));
 		}
+
 		[Conditional ("FULL_AST")]
 		public void AddMember (MemberCore member, IList<Tuple<Modifiers, Location>> modLocations, IEnumerable<Location> locations)
 		{
@@ -643,26 +802,6 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 			member_locs.Add (member, new MemberLocations (modLocations, locations));
 		}
 
-		[Conditional ("FULL_AST")]
-		public void AppendTo (object existing, params Location[] locations)
-		{
-			AppendTo (existing, (IEnumerable<Location>)locations);
-
-		}
-
-		[Conditional ("FULL_AST")]
-		public void AppendTo (object existing, IEnumerable<Location> locations)
-		{
-			if (existing == null)
-				return;
-			List<Location> locs;
-			if (simple_locs.TryGetValue (existing, out locs)) {
-				simple_locs [existing].AddRange (locations);
-				return;
-			}
-			AddLocation (existing, locations);
-		}
-		
 		[Conditional ("FULL_AST")]
 		public void AppendToMember (MemberCore existing, params Location[] locations)
 		{
@@ -687,7 +826,7 @@ if (checkpoints.Length <= CheckpointIndex) throw new Exception (String.Format ("
 		{
 			if (element == null)
 				return null;
-			List<Location > found;
+			List<Location> found;
 			simple_locs.TryGetValue (element, out found);
 			return found;
 		}

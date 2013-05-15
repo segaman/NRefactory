@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -24,7 +24,7 @@ using ICSharpCode.NRefactory.Utils;
 
 namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 {
-	public abstract class AbstractTypeParameter : ITypeParameter
+	public abstract class AbstractTypeParameter : ITypeParameter, ICompilationProvider
 	{
 		readonly ICompilation compilation;
 		readonly EntityType ownerType;
@@ -94,48 +94,73 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		
 		public IType EffectiveBaseClass {
 			get {
-				if (effectiveBaseClass == null)
-					effectiveBaseClass = CalculateEffectiveBaseClass();
+				if (effectiveBaseClass == null) {
+					// protect against cyclic type parameters
+					using (var busyLock = BusyManager.Enter(this)) {
+						if (!busyLock.Success)
+							return SpecialType.UnknownType; // don't cache this error
+						effectiveBaseClass = CalculateEffectiveBaseClass();
+					}
+				}
 				return effectiveBaseClass;
 			}
 		}
 		
 		IType CalculateEffectiveBaseClass()
 		{
-			// protect against cyclic type parameters
-			using (var busyLock = BusyManager.Enter(this)) {
-				if (!busyLock.Success)
-					return SpecialType.UnknownType;
-				
-				if (HasValueTypeConstraint)
-					return this.Compilation.FindType(KnownTypeCode.ValueType);
-				
-				List<IType> classTypeConstraints = new List<IType>();
-				foreach (IType constraint in this.DirectBaseTypes) {
-					if (constraint.Kind == TypeKind.Class) {
-						classTypeConstraints.Add(constraint);
-					} else if (constraint.Kind == TypeKind.TypeParameter) {
-						IType baseClass = ((ITypeParameter)constraint).EffectiveBaseClass;
-						if (baseClass.Kind == TypeKind.Class)
-							classTypeConstraints.Add(baseClass);
+			if (HasValueTypeConstraint)
+				return this.Compilation.FindType(KnownTypeCode.ValueType);
+			
+			List<IType> classTypeConstraints = new List<IType>();
+			foreach (IType constraint in this.DirectBaseTypes) {
+				if (constraint.Kind == TypeKind.Class) {
+					classTypeConstraints.Add(constraint);
+				} else if (constraint.Kind == TypeKind.TypeParameter) {
+					IType baseClass = ((ITypeParameter)constraint).EffectiveBaseClass;
+					if (baseClass.Kind == TypeKind.Class)
+						classTypeConstraints.Add(baseClass);
+				}
+			}
+			if (classTypeConstraints.Count == 0)
+				return this.Compilation.FindType(KnownTypeCode.Object);
+			// Find the derived-most type in the resulting set:
+			IType result = classTypeConstraints[0];
+			for (int i = 1; i < classTypeConstraints.Count; i++) {
+				if (classTypeConstraints[i].GetDefinition().IsDerivedFrom(result.GetDefinition()))
+					result = classTypeConstraints[i];
+			}
+			return result;
+		}
+		
+		ICollection<IType> effectiveInterfaceSet;
+		
+		public ICollection<IType> EffectiveInterfaceSet {
+			get {
+				var result = LazyInit.VolatileRead(ref effectiveInterfaceSet);
+				if (result != null) {
+					return result;
+				} else {
+					// protect against cyclic type parameters
+					using (var busyLock = BusyManager.Enter(this)) {
+						if (!busyLock.Success)
+							return EmptyList<IType>.Instance; // don't cache this error
+						return LazyInit.GetOrSet(ref effectiveInterfaceSet, CalculateEffectiveInterfaceSet());
 					}
 				}
-				if (classTypeConstraints.Count == 0)
-					return this.Compilation.FindType(KnownTypeCode.Object);
-				// Find the derived-most type in the resulting set:
-				IType result = classTypeConstraints[0];
-				for (int i = 1; i < classTypeConstraints.Count; i++) {
-					if (classTypeConstraints[i].GetDefinition().IsDerivedFrom(result.GetDefinition()))
-						result = classTypeConstraints[i];
-				}
-				return result;
 			}
 		}
 		
-		public IList<IType> EffectiveInterfaceSet {
-			get {
-				throw new NotImplementedException();
+		ICollection<IType> CalculateEffectiveInterfaceSet()
+		{
+			HashSet<IType> result = new HashSet<IType>();
+			foreach (IType constraint in this.DirectBaseTypes) {
+				if (constraint.Kind == TypeKind.Interface) {
+					result.Add(constraint);
+				} else if (constraint.Kind == TypeKind.TypeParameter) {
+					result.UnionWith(((ITypeParameter)constraint).EffectiveInterfaceSet);
+				}
 			}
+			return result;
 		}
 		
 		public abstract bool HasDefaultConstructorConstraint { get; }
@@ -181,7 +206,16 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		int IType.TypeParameterCount {
 			get { return 0; }
 		}
-		
+
+		bool IType.IsParameterized { 
+			get { return false; }
+		}
+
+		readonly static IList<IType> emptyTypeArguments = new IType[0];
+		IList<IType> IType.TypeArguments {
+			get { return emptyTypeArguments; }
+		}
+
 		public abstract IEnumerable<IType> DirectBaseTypes { get; }
 		
 		public string Name {
@@ -219,7 +253,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		
 		public ITypeReference ToTypeReference()
 		{
-			return new TypeParameterReference(this.OwnerType, this.Index);
+			return TypeParameterReference.Create(this.OwnerType, this.Index);
 		}
 		
 		IEnumerable<IType> IType.GetNestedTypes(Predicate<ITypeDefinition> filter, GetMemberOptions options)
@@ -301,7 +335,17 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			else
 				return GetMembersHelper.GetAccessors(this, FilterNonStatic(filter), options);
 		}
+
+		public TypeParameterSubstitution GetSubstitution()
+		{
+			return TypeParameterSubstitution.Identity;
+		}
 		
+		public TypeParameterSubstitution GetSubstitution(IList<IType> methodTypeArguments)
+		{
+			return TypeParameterSubstitution.Identity;
+		}
+
 		static Predicate<T> FilterNonStatic<T>(Predicate<T> filter) where T : class, IUnresolvedMember
 		{
 			if (filter == null)

@@ -66,15 +66,15 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					Expression argExpr;
 					if (node.ParameterModifier == ParameterModifier.Ref) {
 						body.Add (new VariableDeclarationStatement (node.Type.Clone (), node.Name, defaultExpr));
-						argExpr = new DirectionExpression (FieldDirection.Ref, new IdentifierExpression (node.Name));
+						argExpr = GetArgumentExpression (node);
 					} else if (node.ParameterModifier == ParameterModifier.Out) {
 						body.Add (new VariableDeclarationStatement (node.Type.Clone (), node.Name));
-						argExpr = new DirectionExpression (FieldDirection.Out, new IdentifierExpression (node.Name));
+						argExpr = GetArgumentExpression (node);
 					} else {
 						argExpr = defaultExpr;
 					}
 					body.Add (new InvocationExpression (new IdentifierExpression (methodDecl.Name),
-						methodDecl.Parameters.Select (param => param == node ? argExpr : new IdentifierExpression (param.Name))));
+						methodDecl.Parameters.Select (param => param == node ? argExpr : GetArgumentExpression(param))));
 
 					var decl = (MethodDeclaration)methodDecl.Clone ();
 					decl.Parameters.Remove (decl.Parameters.First (param => param.Name == node.Name));
@@ -84,7 +84,19 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 					//if (node.ParameterModifier != ParameterModifier.Out)
 					//    script.Link (defaultExpr);
-				}); 
+				}, node.NameToken); 
+		}
+
+		static Expression GetArgumentExpression(ParameterDeclaration parameter)
+		{
+			var identifierExpr = new IdentifierExpression(parameter.Name);
+			switch (parameter.ParameterModifier) {
+				case ParameterModifier.Out:
+					return new DirectionExpression (FieldDirection.Out, identifierExpr);
+				case ParameterModifier.Ref:
+					return new DirectionExpression (FieldDirection.Ref, identifierExpr);
+			}
+			return identifierExpr;
 		}
 
 		static Expression GetDefaultValueExpression (RefactoringContext context, AstType astType)
@@ -100,10 +112,9 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				var members = type.GetMembers ().ToArray();
 				if (members.Length == 0)
 					return new DefaultValueExpression (astType.Clone ());
-				return astType.Member(members[0].Name);
+				return astType.Member(members[0].Name).Clone ();
 			}
 
-			// reference, dynamic
 			if ((type.IsReferenceType ?? false) || type.Kind == TypeKind.Dynamic)
 				return new NullReferenceExpression ();
 
@@ -111,10 +122,10 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			if (typeDefinition != null) {
 				switch (typeDefinition.KnownTypeCode) {
 					case KnownTypeCode.Boolean:
-					return new PrimitiveExpression (false);
+						return new PrimitiveExpression (false);
 
 					case KnownTypeCode.Char:
-					return new PrimitiveExpression ('\0');
+						return new PrimitiveExpression ('\0');
 
 					case KnownTypeCode.SByte:
 					case KnownTypeCode.Byte:
@@ -127,10 +138,10 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					case KnownTypeCode.Single:
 					case KnownTypeCode.Double:
 					case KnownTypeCode.Decimal:
-					return new PrimitiveExpression (0);
+						return new PrimitiveExpression (0);
 
 					case KnownTypeCode.NullableOfT:
-					return new NullReferenceExpression ();
+						return new NullReferenceExpression ();
 				}
 				if (type.Kind == TypeKind.Struct)
 					return new ObjectCreateExpression (astType.Clone ());

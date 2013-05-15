@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -438,7 +438,7 @@ class TestClass {
 		{
 			NamespaceResolveResult ns;
 			string program = "using COL = System.Collections;\r\nclass A {\r\n$.ArrayList a;\r\n}\r\n";
-			ns = Resolve<NamespaceResolveResult>(program.Replace("$", "$COL$"));
+			ns = Resolve<AliasNamespaceResolveResult>(program.Replace("$", "$COL$"));
 			Assert.AreEqual("System.Collections", ns.NamespaceName, "COL");
 			ns = Resolve<NamespaceResolveResult>(program.Replace("$", "$COL.Generic$"));
 			Assert.AreEqual("System.Collections.Generic", ns.NamespaceName, "COL.Generic");
@@ -455,7 +455,7 @@ class TestClass {
 	}
 }
 ";
-			TypeResolveResult trr = Resolve<TypeResolveResult>(program.Replace("COL a", "$COL$ a"));
+			TypeResolveResult trr = Resolve<AliasTypeResolveResult>(program.Replace("COL a", "$COL$ a"));
 			Assert.AreEqual("System.Collections.ArrayList", trr.Type.FullName, "COL");
 			ResolveResult rr = Resolve<CSharpInvocationResolveResult>(program.Replace("new COL()", "$new COL()$"));
 			Assert.AreEqual("System.Collections.ArrayList", rr.Type.FullName, "a");
@@ -887,7 +887,7 @@ class B
 			var rr = Resolve<MethodGroupResolveResult>(program);
 			Assert.AreEqual("X", rr.TypeArguments.Single().Name);
 			
-			var m = (SpecializedMethod)rr.Methods.Single();
+			var m = rr.Methods.Single();
 			Assert.AreSame(rr.TypeArguments.Single(), m.TypeArguments.Single());
 			Assert.AreEqual("T", m.Parameters[0].Type.Name);
 			Assert.AreEqual("X", m.Parameters[1].Type.Name);
@@ -989,5 +989,109 @@ class MainClass : Test
 			
 			Assert.AreEqual("System.String", result.Type.FullName);
 		}
+
+		[Test]
+		public void DuplicateUsingDirective() {
+			string program = @"
+using foo;
+using foo;
+namespace bar {
+	using foo;
+	using foo;
+
+    public class Bar {
+        public void M() {
+            new $Foo$();
+        }
+    }
+}
+namespace foo {
+    public class Foo {
+    }
+}";
+
+			var result = Resolve<TypeResolveResult>(program);
+			Assert.IsFalse(result.IsError);
+			Assert.AreEqual("foo.Foo", result.Type.FullName);
+
+		}
+		
+		[Test]
+		public void BaseTypeReference_refers_to_outer_type()
+		{
+			string program = @"class B {}
+    class A : $B$ {
+        class B {}
+    }";
+			var result = Resolve<TypeResolveResult>(program);
+			Assert.IsFalse(result.IsError);
+			Assert.AreEqual("B", result.Type.FullName);
+			
+			// also check if the reference in the type system is correct
+			var a = ((ITypeDefinition)result.Type).Compilation.RootNamespace.GetTypeDefinition("A", 0);
+			Assert.AreEqual("B", a.DirectBaseTypes.Single().FullName);
+		}
+		
+		[Test]
+		public void Class_constraint_refers_to_outer_type()
+		{
+			string program = @"class B {}
+    class A<T> where T : $B$ {
+        class B {}
+    }";
+			var result = Resolve<TypeResolveResult>(program);
+			Assert.IsFalse(result.IsError);
+			Assert.AreEqual("B", result.Type.FullName);
+			
+			// also check if the reference in the type system is correct
+			var a = ((ITypeDefinition)result.Type).Compilation.RootNamespace.GetTypeDefinition("A", 1);
+			Assert.AreEqual("B", a.TypeParameters.Single().DirectBaseTypes.Single().FullName);
+		}
+		
+		[Test]
+		public void Method_constraint_refers_to_inner_type()
+		{
+			string program = @"class B {}
+    class A {
+    	void M<T>() where T : $B$ {}
+        class B {}
+    }";
+			var result = Resolve<TypeResolveResult>(program);
+			Assert.IsFalse(result.IsError);
+			Assert.AreEqual("A.B", result.Type.FullName);
+			
+			// also check if the reference in the type system is correct
+			var a = ((ITypeDefinition)result.Type).Compilation.RootNamespace.GetTypeDefinition("A", 0);
+			var method = a.Methods.Single(m => m.Name == "M");
+			Assert.AreEqual("A.B", method.TypeParameters.Single().DirectBaseTypes.Single().FullName);
+		}
+
+		[Test]
+		public void EmptyNamespaces()
+		{
+			// should maybe a typesystem test - but empty namespaces don't make sense in cecil.
+			string program = @"namespace A.B.C.D
+{
+
+}
+
+namespace Test
+{
+    using $A.B.C.D$;
+
+    public class C
+    {
+        public static void Main ()
+        {
+
+        }
+    }
+}
+
+	";
+			var nrr = Resolve<NamespaceResolveResult>(program);
+			Assert.AreEqual("A.B.C.D", nrr.NamespaceName);
+		}
+
 	}
 }

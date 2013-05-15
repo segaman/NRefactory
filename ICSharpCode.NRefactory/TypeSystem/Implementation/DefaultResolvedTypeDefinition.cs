@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -262,7 +262,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			
 			public void AddPart(IUnresolvedMethod method, ITypeResolveContext context)
 			{
-				if (method.IsPartialMethodImplementation) {
+				if (method.HasBody) {
 					// make the implementation the primary part
 					this.Parts.Insert(0, method);
 					this.Contexts.Insert (0, context);
@@ -297,7 +297,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				ITypeResolveContext contextForPart = parentContextForPart.WithCurrentTypeDefinition(this);
 				foreach (var member in part.Members) {
 					IUnresolvedMethod method = member as IUnresolvedMethod;
-					if (method != null && (method.IsPartialMethodDeclaration || method.IsPartialMethodImplementation)) {
+					if (method != null && method.IsPartial) {
 						// Merge partial method declaration and implementation
 						if (partialMethodInfos == null)
 							partialMethodInfos = new List<PartialMethodInfo>();
@@ -395,9 +395,9 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				KnownTypeCode result = this.knownTypeCode;
 				if (result == (KnownTypeCode)(-1)) {
 					result = KnownTypeCode.None;
+					ICompilation compilation = this.Compilation;
 					for (int i = 0; i < KnownTypeReference.KnownTypeCodeCount; i++) {
-						KnownTypeReference r = KnownTypeReference.Get((KnownTypeCode)i);
-						if (r != null && r.Resolve(parentContext) == this) {
+						if (compilation.FindType((KnownTypeCode)i) == this) {
 							result = (KnownTypeCode)i;
 							break;
 						}
@@ -492,7 +492,18 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		public int TypeParameterCount {
 			get { return parts[0].TypeParameters.Count; }
 		}
-		
+
+		public IList<IType> TypeArguments {
+			get { 
+				// ToList() call is necessary because IList<> isn't covariant
+				return TypeParameters.ToList<IType>();
+			}
+		}
+
+		public bool IsParameterized { 
+			get { return false; }
+		}
+
 		#region DirectBaseTypes
 		IList<IType> directBaseTypes;
 		
@@ -564,6 +575,10 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		
 		public string Namespace {
 			get { return parts[0].Namespace; }
+		}
+		
+		public FullTypeName FullTypeName {
+			get { return parts[0].FullTypeName; }
 		}
 		
 		public DomRegion Region {
@@ -779,7 +794,7 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				using (var busyLock = BusyManager.Enter(this)) {
 					if (busyLock.Success) {
 						return coClass.GetConstructors(filter, options)
-							.Select(m => new SpecializedMethod(m, TypeParameterSubstitution.Identity) { DeclaringType = this });
+							.Select(m => new SpecializedMethod(m, m.Substitution) { DeclaringType = this });
 					}
 				}
 				return EmptyList<IMethod>.Instance;
@@ -900,6 +915,16 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 		}
 		#endregion
 		
+		public TypeParameterSubstitution GetSubstitution()
+		{
+			return TypeParameterSubstitution.Identity;
+		}
+		
+		public TypeParameterSubstitution GetSubstitution(IList<IType> methodTypeArguments)
+		{
+			return TypeParameterSubstitution.Identity;
+		}
+
 		public bool Equals(IType other)
 		{
 			return this == other;

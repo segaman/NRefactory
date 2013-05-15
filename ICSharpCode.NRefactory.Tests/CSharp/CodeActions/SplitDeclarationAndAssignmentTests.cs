@@ -75,7 +75,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 				"{" + Environment.NewLine +
 				"	void Test ()" + Environment.NewLine +
 				"	{" + Environment.NewLine +
-				"		var aVar;" + Environment.NewLine +
+				"		TestClass aVar;" + Environment.NewLine +
 				"		aVar = this;" + Environment.NewLine +
 				"	}" + Environment.NewLine +
 				"}", result);
@@ -100,7 +100,8 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 				"	void Test ()" + Environment.NewLine +
 				"	{" + Environment.NewLine +
 				"		int i;" + Environment.NewLine +
-				"		for (i = 1; i < 10; i++) {}" + Environment.NewLine +
+				"		for (i = 1; i < 10; i++) {" + Environment.NewLine +
+				"		}" + Environment.NewLine +
 				"	}" + Environment.NewLine +
 				"}", result);
 		}

@@ -102,6 +102,23 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 			return new ExpressionResult((AstNode)expr, baseUnit);
 		}
 
+		public ExpressionResult GetMethodTypeArgumentInvocationBeforeCursor()
+		{
+			SyntaxTree baseUnit;
+			if (currentMember == null && currentType == null) { 
+				return null;
+			}
+			baseUnit = ParseStub("x>.A ()");
+			
+			//var memberLocation = currentMember != null ? currentMember.Region.Begin : currentType.Region.Begin;
+			var expr = baseUnit.GetNodeAt<MemberReferenceExpression>(location.Line, location.Column + 1);
+			if (expr == null)
+				return null;
+			return new ExpressionResult((AstNode)expr, baseUnit);
+		}
+
+
+
 		IEnumerable<IMethod> CollectMethods(AstNode resolvedNode, MethodGroupResolveResult resolveResult)
 		{
 			var lookup = new MemberLookup(ctx.CurrentTypeDefinition, Compilation.MainAssembly);
@@ -109,6 +126,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 			if (resolvedNode is IdentifierExpression && currentMember != null && currentMember.IsStatic || resolveResult.TargetResult is TypeResolveResult) {
 				onlyStatic = true;
 			}
+			var methods = new List<IMethod>();
 			foreach (var method in resolveResult.Methods) {
 				if (method.IsConstructor) {
 					continue;
@@ -118,14 +136,49 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 				if (onlyStatic && !method.IsStatic) {
 					continue;
 				}
-				yield return method;	
+				if (method.IsShadowing) {
+					for (int j = 0; j < methods.Count; j++) {
+						if (ParameterListComparer.Instance.Equals(methods[j].Parameters, method.Parameters)) {
+							methods.RemoveAt (j);
+							j--;
+						}
+					}
+				}
+				methods.Add (method);
 			}
-				
+			foreach (var m in methods) {
+				yield return m;
+			}
 			foreach (var extMethods in resolveResult.GetEligibleExtensionMethods (true)) {
 				foreach (var method in extMethods) {
-					yield return method;
+					if (methods.Contains (method))
+						continue;
+					yield return new ReducedExtensionMethod (method);
 				}
 			}
+		}
+
+		IEnumerable<IProperty> GetAccessibleIndexers(IType type)
+		{
+			var lookup = new MemberLookup(ctx.CurrentTypeDefinition, Compilation.MainAssembly);
+			var properties = new List<IProperty>();
+			foreach (var property in type.GetProperties ()) {
+				if (!property.IsIndexer)
+					continue;
+				if (!lookup.IsAccessible (property, true))
+					continue;
+				if (property.IsShadowing) {
+					for (int j = 0; j < properties.Count; j++) {
+						if (ParameterListComparer.Instance.Equals(properties[j].Parameters, property.Parameters)) {
+							properties.RemoveAt (j);
+							j--;
+						}
+					}
+				}
+
+				properties.Add (property);
+			}
+			return properties;
 		}
 		
 		public IParameterDataProvider GetParameterDataProvider(int offset, char completionChar)
@@ -152,7 +205,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 					if (invoke.Node is ConstructorInitializer) {
 						var init = (ConstructorInitializer)invoke.Node;
 						if (init.ConstructorInitializerType == ConstructorInitializerType.This) {
-							return factory.CreateConstructorProvider(document.GetOffset(invoke.Node.StartLocation), ctx.CurrentTypeDefinition);
+							return factory.CreateConstructorProvider(document.GetOffset(invoke.Node.StartLocation), ctx.CurrentTypeDefinition, init);
 						} else {
 							var baseType = ctx.CurrentTypeDefinition.DirectBaseTypes.FirstOrDefault(bt => bt.Kind != TypeKind.Interface);
 							if (baseType == null) {
@@ -167,7 +220,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 							return null;
 						return factory.CreateConstructorProvider(document.GetOffset(invoke.Node.StartLocation), createType.Item1.Type);
 					}
-				
+					
 					if (invoke.Node is ICSharpCode.NRefactory.CSharp.Attribute) {
 						var attribute = ResolveExpression(invoke);
 						if (attribute == null || attribute.Item1 == null) {
@@ -189,22 +242,22 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 							return factory.CreateMethodDataProvider(document.GetOffset(invoke.Node.StartLocation), new [] { (IMethod)mr.Member });
 						}
 					}
-				
+					
 					if (resolveResult.Type.Kind == TypeKind.Delegate) {
 						return factory.CreateDelegateDataProvider(document.GetOffset(invoke.Node.StartLocation), resolveResult.Type);
 					}
-				
-//				
-//				if (result.ExpressionContext == ExpressionContext.BaseConstructorCall) {
-//					if (resolveResult is ThisResolveResult)
-//						return new NRefactoryParameterDataProvider (textEditorData, resolver, resolveResult as ThisResolveResult);
-//					if (resolveResult is BaseResolveResult)
-//						return new NRefactoryParameterDataProvider (textEditorData, resolver, resolveResult as BaseResolveResult);
-//				}
-//				IType resolvedType = resolver.SearchType (resolveResult.ResolvedType);
-//				if (resolvedType != null && resolvedType.ClassType == ClassType.Delegate) {
-//					return new NRefactoryParameterDataProvider (textEditorData, result.Expression, resolvedType);
-//				}
+					
+					//				
+					//				if (result.ExpressionContext == ExpressionContext.BaseConstructorCall) {
+					//					if (resolveResult is ThisResolveResult)
+					//						return new NRefactoryParameterDataProvider (textEditorData, resolver, resolveResult as ThisResolveResult);
+					//					if (resolveResult is BaseResolveResult)
+					//						return new NRefactoryParameterDataProvider (textEditorData, resolver, resolveResult as BaseResolveResult);
+					//				}
+					//				IType resolvedType = resolver.SearchType (resolveResult.ResolvedType);
+					//				if (resolvedType != null && resolvedType.ClassType == ClassType.Delegate) {
+					//					return new NRefactoryParameterDataProvider (textEditorData, result.Expression, resolvedType);
+					//				}
 					break;
 				case ',':
 					invoke = GetInvocationBeforeCursor(true) ?? GetIndexerBeforeCursor();
@@ -217,18 +270,20 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 							if (typeExpression == null || typeExpression.Item1 == null || typeExpression.Item1.IsError) {
 								return null;
 							}
-						
+							
 							return factory.CreateTypeParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), CollectAllTypes(typeExpression.Item1.Type));
 						}
 						return null;
 					}
 					if (GetCurrentParameterIndex(document.GetOffset(invoke.Node.StartLocation), offset) < 0)
 						return null;
+					if (invoke.Node is ArrayCreateExpression)
+						return null;
 					if (invoke.Node is ObjectCreateExpression) {
 						var createType = ResolveExpression(((ObjectCreateExpression)invoke.Node).Type);
 						return factory.CreateConstructorProvider(document.GetOffset(invoke.Node.StartLocation), createType.Item1.Type);
 					}
-				
+					
 					if (invoke.Node is ICSharpCode.NRefactory.CSharp.Attribute) {
 						var attribute = ResolveExpression(invoke);
 						if (attribute == null || attribute.Item1 == null) {
@@ -236,13 +291,13 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 						}
 						return factory.CreateConstructorProvider(document.GetOffset(invoke.Node.StartLocation), attribute.Item1.Type);
 					}
-				
+					
 					invocationExpression = ResolveExpression(invoke);
-				
+					
 					if (invocationExpression == null || invocationExpression.Item1 == null || invocationExpression.Item1.IsError) {
 						return null;
 					}
-				
+					
 					resolveResult = invocationExpression.Item1;
 					if (resolveResult is MethodGroupResolveResult) {
 						return factory.CreateMethodDataProvider(document.GetOffset(invoke.Node.StartLocation), CollectMethods(invoke.Node, resolveResult as MethodGroupResolveResult));
@@ -257,30 +312,40 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 						}
 					}
 					if (resolveResult != null) {
-						return factory.CreateIndexerParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), resolveResult.Type, invoke.Node);
+						return factory.CreateIndexerParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), resolveResult.Type, GetAccessibleIndexers (resolveResult.Type), invoke.Node);
 					}
 					break;
 				case '<':
+					invoke = GetMethodTypeArgumentInvocationBeforeCursor();
+					if (invoke != null) {
+						var tExpr2 = ResolveExpression(invoke);
+						if (tExpr2 != null && tExpr2.Item1 is MethodGroupResolveResult && !tExpr2.Item1.IsError) {
+							return factory.CreateTypeParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), CollectMethods(invoke.Node, tExpr2.Item1 as MethodGroupResolveResult));
+						}
+					}
 					invoke = GetTypeBeforeCursor();
-					if (invoke == null) {
+					if (invoke == null || invoke.Node.StartLocation.IsEmpty) {
 						return null;
 					}
 					var tExpr = ResolveExpression(invoke);
 					if (tExpr == null || tExpr.Item1 == null || tExpr.Item1.IsError) {
 						return null;
 					}
-				
+
 					return factory.CreateTypeParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), CollectAllTypes(tExpr.Item1.Type));
 				case '[':
 					invoke = GetIndexerBeforeCursor();
 					if (invoke == null) {
 						return null;
 					}
+					if (invoke.Node is ArrayCreateExpression) {
+						return null;
+					}
 					var indexerExpression = ResolveExpression(invoke);
 					if (indexerExpression == null || indexerExpression.Item1 == null || indexerExpression.Item1.IsError) {
 						return null;
 					}
-					return factory.CreateIndexerParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), indexerExpression.Item1.Type, invoke.Node);
+					return factory.CreateIndexerParameterDataProvider(document.GetOffset(invoke.Node.StartLocation), indexerExpression.Item1.Type, GetAccessibleIndexers (indexerExpression.Item1.Type), invoke.Node);
 			}
 			return null;
 		}
@@ -320,7 +385,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 			return result;
 		}
 		
-	
+		
 	}
 }
 

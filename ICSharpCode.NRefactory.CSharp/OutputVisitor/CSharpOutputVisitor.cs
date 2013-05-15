@@ -1,4 +1,4 @@
-// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -334,7 +334,7 @@ namespace ICSharpCode.NRefactory.CSharp
 		{
 			WriteToken(tokenRole.Token, tokenRole);
 		}
-			
+		
 		void WriteToken(string token, Role tokenRole)
 		{
 			WriteSpecialsUpToRole(tokenRole);
@@ -1057,6 +1057,12 @@ namespace ICSharpCode.NRefactory.CSharp
 					}
 					return;
 				}
+				if (f == 0 && 1 / f == float.NegativeInfinity) {
+					// negative zero is a special case
+					// (again, not a primitive expression, but it's better to handle
+					// the special case here than to do it in all code generators)
+					formatter.WriteToken("-");
+				}
 				formatter.WriteToken(f.ToString("R", NumberFormatInfo.InvariantInfo) + "f");
 				lastWritten = LastWritten.Other;
 			} else if (val is double) {
@@ -1074,6 +1080,12 @@ namespace ICSharpCode.NRefactory.CSharp
 						WriteIdentifier("NaN");
 					}
 					return;
+				}
+				if (f == 0 && 1 / f == double.NegativeInfinity) {
+					// negative zero is a special case
+					// (again, not a primitive expression, but it's better to handle
+					// the special case here than to do it in all code generators)
+					formatter.WriteToken("-");
 				}
 				string number = f.ToString("R", NumberFormatInfo.InvariantInfo);
 				if (number.IndexOf('.') < 0 && number.IndexOf('E') < 0) {
@@ -2031,9 +2043,12 @@ namespace ICSharpCode.NRefactory.CSharp
 			WriteAttributes(constructorDeclaration.Attributes);
 			WriteModifiers(constructorDeclaration.ModifierTokens);
 			TypeDeclaration type = constructorDeclaration.Parent as TypeDeclaration;
-			StartNode(constructorDeclaration.NameToken);
+			var nameToken = constructorDeclaration.NameToken;
+			if (!nameToken.IsNull)
+				StartNode(nameToken);
 			WriteIdentifier(type != null ? type.Name : constructorDeclaration.Name);
-			EndNode(constructorDeclaration.NameToken);
+			if (!nameToken.IsNull)
+				EndNode(nameToken);
 			Space(policy.SpaceBeforeConstructorDeclarationParentheses);
 			WriteCommaSeparatedListInParenthesis(constructorDeclaration.Parameters, policy.SpaceWithinMethodDeclarationParentheses);
 			if (!constructorDeclaration.Initializer.IsNull) {
@@ -2066,9 +2081,12 @@ namespace ICSharpCode.NRefactory.CSharp
 			WriteModifiers(destructorDeclaration.ModifierTokens);
 			WriteToken(DestructorDeclaration.TildeRole);
 			TypeDeclaration type = destructorDeclaration.Parent as TypeDeclaration;
-			StartNode(destructorDeclaration.NameToken);
+			var nameToken = destructorDeclaration.NameToken;
+			if (!nameToken.IsNull)
+				StartNode(nameToken);
 			WriteIdentifier(type != null ? type.Name : destructorDeclaration.Name);
-			EndNode(destructorDeclaration.NameToken);
+			if (!nameToken.IsNull)
+				EndNode(nameToken);
 			Space(policy.SpaceBeforeConstructorDeclarationParentheses);
 			LPar();
 			RPar();
@@ -2391,9 +2409,9 @@ namespace ICSharpCode.NRefactory.CSharp
 
 		public void VisitNewLine(NewLineNode newLineNode)
 		{
-			formatter.StartNode(newLineNode);
-			formatter.NewLine();
-			formatter.EndNode(newLineNode);
+//			formatter.StartNode(newLineNode);
+//			formatter.NewLine();
+//			formatter.EndNode(newLineNode);
 		}
 
 		public void VisitWhitespace(WhitespaceNode whitespaceNode)

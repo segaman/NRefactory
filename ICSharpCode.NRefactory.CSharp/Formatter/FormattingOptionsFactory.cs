@@ -1,4 +1,4 @@
-// 
+﻿// 
 // FormattingOptionsFactory.cs
 //  
 // Author:
@@ -82,19 +82,21 @@ namespace ICSharpCode.NRefactory.CSharp
 				StatementBraceStyle = BraceStyle.EndOfLine,
 	
 				ElseNewLinePlacement = NewLinePlacement.SameLine,
+				ElseIfNewLinePlacement = NewLinePlacement.SameLine,
 				CatchNewLinePlacement = NewLinePlacement.SameLine,
 				FinallyNewLinePlacement = NewLinePlacement.SameLine,
 				WhileNewLinePlacement = NewLinePlacement.SameLine,
 				ArrayInitializerWrapping = Wrapping.WrapIfTooLong,
 				ArrayInitializerBraceStyle = BraceStyle.EndOfLine,
-	
+				AllowOneLinedArrayInitialziers = true,
+
 				SpaceBeforeMethodCallParentheses = true,
 				SpaceBeforeMethodDeclarationParentheses = true,
 				SpaceBeforeConstructorDeclarationParentheses = true,
 				SpaceBeforeDelegateDeclarationParentheses = true,
 				SpaceAfterMethodCallParameterComma = true,
 				SpaceAfterConstructorDeclarationParameterComma = true,
-				
+
 				SpaceBeforeNewParentheses = true,
 				SpacesWithinNewParentheses = false,
 				SpacesBetweenEmptyNewParentheses = false,
@@ -152,6 +154,7 @@ namespace ICSharpCode.NRefactory.CSharp
 				PropertyFormatting = PropertyFormatting.AllowOneLine,
 				SpaceBeforeMethodDeclarationParameterComma = false,
 				SpaceAfterMethodDeclarationParameterComma = true,
+				SpaceAfterDelegateDeclarationParameterComma = true,
 				SpaceBeforeFieldDeclarationComma = false,
 				SpaceAfterFieldDeclarationComma = true,
 				SpaceBeforeLocalVariableDeclarationComma = false,
@@ -166,30 +169,26 @@ namespace ICSharpCode.NRefactory.CSharp
 				
 				BlankLinesBeforeUsings = 0,
 				BlankLinesAfterUsings = 1,
-				
+				UsingPlacement = UsingPlacement.TopOfFile,
 				
 				BlankLinesBeforeFirstDeclaration = 0,
 				BlankLinesBetweenTypes = 1,
 				BlankLinesBetweenFields = 0,
 				BlankLinesBetweenEventFields = 0,
 				BlankLinesBetweenMembers = 1,
-	
+				AlignToFirstIndexerArgument = true,
+				AlignToFirstIndexerDeclarationParameter = true,
+				AlignToFirstMethodCallArgument = true,
+				AlignToFirstMethodDeclarationParameter = true,
 				KeepCommentsAtFirstColumn = true,
 				ChainedMethodCallWrapping = Wrapping.DoNotChange,
 				MethodCallArgumentWrapping = Wrapping.DoNotChange,
-				NewLineAferMethodCallOpenParentheses = true,
-				MethodCallClosingParenthesesOnNewLine = true,
+				NewLineAferMethodCallOpenParentheses = NewLinePlacement.DoNotCare,
+				MethodCallClosingParenthesesOnNewLine = NewLinePlacement.DoNotCare,
 
 				IndexerArgumentWrapping = Wrapping.DoNotChange,
-				NewLineAferIndexerOpenBracket = false,
-				IndexerClosingBracketOnNewLine = false,
-
-				IfElseBraceForcement = BraceForcement.DoNotChange,
-				ForBraceForcement = BraceForcement.DoNotChange,
-				ForEachBraceForcement = BraceForcement.DoNotChange,
-				WhileBraceForcement = BraceForcement.DoNotChange,
-				UsingBraceForcement = BraceForcement.DoNotChange,
-				FixedBraceForcement = BraceForcement.DoNotChange
+				NewLineAferIndexerOpenBracket = NewLinePlacement.DoNotCare,
+				IndexerClosingBracketOnNewLine = NewLinePlacement.DoNotCare
 			};
 		}
 
@@ -199,12 +198,6 @@ namespace ICSharpCode.NRefactory.CSharp
 		public static CSharpFormattingOptions CreateSharpDevelop()
 		{
 			var baseOptions = CreateKRStyle();
-			baseOptions.IfElseBraceForcement = BraceForcement.AddBraces;
-			baseOptions.ForBraceForcement = BraceForcement.AddBraces;
-			baseOptions.ForEachBraceForcement = BraceForcement.AddBraces;
-			baseOptions.WhileBraceForcement = BraceForcement.AddBraces;
-			baseOptions.UsingBraceForcement = BraceForcement.AddBraces;
-			baseOptions.FixedBraceForcement = BraceForcement.AddBraces;
 			return baseOptions;
 		}
 
@@ -261,6 +254,7 @@ namespace ICSharpCode.NRefactory.CSharp
 				SpaceBeforeMethodDeclarationParentheses = false,
 				SpaceBeforeConstructorDeclarationParentheses = false,
 				SpaceBeforeDelegateDeclarationParentheses = false,
+				SpaceBeforeIndexerDeclarationBracket = false,
 				SpaceAfterMethodCallParameterComma = true,
 				SpaceAfterConstructorDeclarationParameterComma = true,
 				
@@ -307,9 +301,10 @@ namespace ICSharpCode.NRefactory.CSharp
 				SpaceAfterConditionalOperatorCondition = true,
 				SpaceBeforeConditionalOperatorSeparator = true,
 				SpaceAfterConditionalOperatorSeparator = true,
-	
+				SpaceBeforeArrayDeclarationBrackets = false,
+
 				SpacesWithinBrackets = false,
-				SpacesBeforeBrackets = true,
+				SpacesBeforeBrackets = false,
 				SpaceBeforeBracketComma = false,
 				SpaceAfterBracketComma = true,
 						
@@ -322,12 +317,12 @@ namespace ICSharpCode.NRefactory.CSharp
 				PropertyFormatting = PropertyFormatting.AllowOneLine,
 				SpaceBeforeMethodDeclarationParameterComma = false,
 				SpaceAfterMethodDeclarationParameterComma = true,
+				SpaceAfterDelegateDeclarationParameterComma = true,
 				SpaceBeforeFieldDeclarationComma = false,
 				SpaceAfterFieldDeclarationComma = true,
 				SpaceBeforeLocalVariableDeclarationComma = false,
 				SpaceAfterLocalVariableDeclarationComma = true,
 				
-				SpaceBeforeIndexerDeclarationBracket = true,
 				SpaceWithinIndexerDeclarationBracket = false,
 				SpaceBeforeIndexerDeclarationParameterComma = false,
 				SpaceInNamedArgumentAfterDoubleColon = true,
@@ -346,19 +341,13 @@ namespace ICSharpCode.NRefactory.CSharp
 				KeepCommentsAtFirstColumn = true,
 				ChainedMethodCallWrapping = Wrapping.DoNotChange,
 				MethodCallArgumentWrapping = Wrapping.DoNotChange,
-				NewLineAferMethodCallOpenParentheses = true,
-				MethodCallClosingParenthesesOnNewLine = true,
+				NewLineAferMethodCallOpenParentheses = NewLinePlacement.DoNotCare,
+				MethodCallClosingParenthesesOnNewLine = NewLinePlacement.DoNotCare,
 
 				IndexerArgumentWrapping = Wrapping.DoNotChange,
-				NewLineAferIndexerOpenBracket = false,
-				IndexerClosingBracketOnNewLine = false,
+				NewLineAferIndexerOpenBracket = NewLinePlacement.DoNotCare,
+				IndexerClosingBracketOnNewLine = NewLinePlacement.DoNotCare,
 
-				IfElseBraceForcement = BraceForcement.DoNotChange,
-				ForBraceForcement = BraceForcement.DoNotChange,
-				ForEachBraceForcement = BraceForcement.DoNotChange,
-				WhileBraceForcement = BraceForcement.DoNotChange,
-				UsingBraceForcement = BraceForcement.DoNotChange,
-				FixedBraceForcement = BraceForcement.DoNotChange
 			};
 		}
 
@@ -378,6 +367,13 @@ namespace ICSharpCode.NRefactory.CSharp
 			baseOptions.EventRemoveBraceStyle = BraceStyle.NextLine;
 			baseOptions.StatementBraceStyle = BraceStyle.NextLine;
 			baseOptions.ArrayInitializerBraceStyle = BraceStyle.NextLine;
+
+			baseOptions.CatchNewLinePlacement = NewLinePlacement.NewLine;
+			baseOptions.ElseNewLinePlacement = NewLinePlacement.NewLine;
+			baseOptions.FinallyNewLinePlacement = NewLinePlacement.NewLine;
+			baseOptions.WhileNewLinePlacement = NewLinePlacement.DoNotCare;
+			baseOptions.ArrayInitializerWrapping = Wrapping.DoNotChange;
+
 			return baseOptions;
 		}
 	

@@ -24,10 +24,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using System.Linq;
-using ICSharpCode.NRefactory.CSharp.Resolver;
-using ICSharpCode.NRefactory.TypeSystem;
-
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
 	[ContextAction ("Converts expression of lambda body to statement",
@@ -53,7 +49,9 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 						body.Add (new ExpressionStatement (bodyExpr.Clone ()));
 					}
 					script.Replace (bodyExpr, body);
-				});
+				},
+				node
+			);
 		}
 
 		static bool RequireReturnStatement (RefactoringContext context, LambdaExpression lambda)

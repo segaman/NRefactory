@@ -28,6 +28,7 @@ using System.Linq;
 using ICSharpCode.NRefactory.PatternMatching;
 using System.Threading;
 using System.Collections.Generic;
+using ICSharpCode.NRefactory.TypeSystem;
 
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
@@ -50,7 +51,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				var newVarDecl = (VariableDeclarationStatement)varDecl.Clone();
 				newVarDecl.Role = BlockStatement.StatementRole;
 				
-				if (newVarDecl.Type.IsMatch(new SimpleType ("var"))) {
+				if (newVarDecl.Type.IsVar()) {
 					newVarDecl.Type = type;
 				}
 				
@@ -58,17 +59,19 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				
 				script.InsertBefore(varDecl, newVarDecl);
 				script.Replace(varDecl, varDecl.Parent is ForStatement ? (AstNode)assign : new ExpressionStatement (assign));
-			});
+			}, varDecl.Variables.First ().AssignToken);
 		}
 		
 		static VariableDeclarationStatement GetVariableDeclarationStatement (RefactoringContext context, out AstType resolvedType, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			var result = context.GetNode<VariableDeclarationStatement> ();
 			if (result != null && result.Variables.Count == 1 && !result.Variables.First ().Initializer.IsNull && result.Variables.First ().NameToken.Contains (context.Location.Line, context.Location.Column)) {
-				resolvedType = result.Type.Clone ();
-				// resolvedType = context.Resolve (result.Variables.First ().Initializer).Type.ConvertToAstType ();
-				// if (resolvedType == null)
-				// 	return null;
+				var type = context.Resolve(result.Variables.First ().Initializer).Type;
+				if (type.Equals(SpecialType.NullType) || type.Equals(SpecialType.UnknownType)) {
+					resolvedType = new PrimitiveType ("object");
+				} else {
+					resolvedType = context.CreateShortType (type);
+				}
 				return result;
 			}
 			resolvedType = null;

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -33,11 +33,11 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 	[Serializable]
 	public sealed class DefaultMemberReference : IMemberReference, ISupportsInterning
 	{
-		EntityType entityType;
-		ITypeReference typeReference;
-		string name;
-		int typeParameterCount;
-		IList<ITypeReference> parameterTypes;
+		readonly EntityType entityType;
+		readonly ITypeReference typeReference;
+		readonly string name;
+		readonly int typeParameterCount;
+		readonly IList<ITypeReference> parameterTypes;
 		
 		public DefaultMemberReference(EntityType entityType, ITypeReference typeReference, string name, int typeParameterCount = 0, IList<ITypeReference> parameterTypes = null)
 		{
@@ -97,13 +97,6 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				}
 			}
 			return null;
-		}
-		
-		void ISupportsInterning.PrepareForInterning(IInterningProvider provider)
-		{
-			typeReference = provider.Intern(typeReference);
-			name = provider.Intern(name);
-			parameterTypes = provider.InternList(parameterTypes);
 		}
 		
 		int ISupportsInterning.GetHashCodeForInterning()

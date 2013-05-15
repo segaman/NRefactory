@@ -24,6 +24,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+using ICSharpCode.NRefactory.TypeSystem;
+
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
 	/// <summary>
@@ -32,15 +34,32 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 	[ContextAction ("Convert cast to 'as'.", Description = "Convert cast to 'as'.")]
 	public class ConvertCastToAsAction : SpecializedCodeAction<CastExpression>
 	{
-
+		static InsertParenthesesVisitor insertParentheses = new InsertParenthesesVisitor ();
 		protected override CodeAction GetAction (RefactoringContext context, CastExpression node)
 		{
+			if (node.Expression.Contains (context.Location))
+				return null;
 			// only works on reference and nullable types
 			var type = context.ResolveType (node.Type);
-			if ((!(type.IsReferenceType ?? true)) && type.FullName != "System.Nullable")
-				return null;
-			return new CodeAction (context.TranslateString ("Convert cast to 'as'"), 
-				script => script.Replace (node, new AsExpression (node.Expression.Clone (), node.Type.Clone ())));
+			var typeDef = type.GetDefinition ();
+			var isNullable = typeDef != null && typeDef.KnownTypeCode == KnownTypeCode.NullableOfT;
+			if (type.IsReferenceType == true || isNullable) {
+				return new CodeAction (context.TranslateString ("Convert cast to 'as'"), script => {
+					var asExpr = new AsExpression (node.Expression.Clone (), node.Type.Clone ());
+					// if parent is an expression, clone parent and replace the case expression with asExpr,
+					// so that we can inset parentheses
+					var parentExpr = node.Parent.Clone () as Expression;
+					if (parentExpr != null) {
+						var castExpr = parentExpr.GetNodeContaining (node.StartLocation, node.EndLocation);
+						castExpr.ReplaceWith (asExpr);
+						parentExpr.AcceptVisitor (insertParentheses);
+						script.Replace (node.Parent, parentExpr);
+					} else {
+						script.Replace (node, asExpr);
+					}
+				}, node);
+			}
+			return null;
 		}
 	}
 }

@@ -55,6 +55,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 			this.doc = document;
 			this.location = location;
 			this.UseExplicitTypes = UseExplict;
+			this.FormattingOptions = FormattingOptionsFactory.CreateMono ();
 			UseExplict = false;
 			Services.AddService (typeof(NamingConventionService), new TestNameService ());
 		}
@@ -77,6 +78,8 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 			get { return location; }
 		}
 		
+		public CSharpFormattingOptions FormattingOptions { get; set; }
+		
 		public Script StartScript ()
 		{
 			return new TestScript (this);
@@ -85,7 +88,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 		sealed class TestScript : DocumentScript
 		{
 			readonly TestRefactoringContext context;
-			public TestScript(TestRefactoringContext context) : base(context.doc, FormattingOptionsFactory.CreateMono (), new TextEditorOptions ())
+			public TestScript(TestRefactoringContext context) : base(context.doc, context.FormattingOptions, new TextEditorOptions ())
 			{
 				this.context = context;
 			}
@@ -101,7 +104,11 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 			
 			public override Task InsertWithCursor(string operation, InsertPosition defaultPosition, IEnumerable<AstNode> nodes)
 			{
-				var entity = context.GetNode<EntityDeclaration>();
+				EntityDeclaration entity = context.GetNode<EntityDeclaration>();
+				if (entity is Accessor) {
+					entity = (EntityDeclaration) entity.Parent;
+				}
+
 				foreach (var node in nodes) {
 					InsertBefore(entity, node);
 				}
@@ -118,7 +125,11 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 				var startOffset = GetCurrentOffset (insertType.LBraceToken.EndLocation);
 				foreach (var node in nodes.Reverse ()) {
 					var output = OutputNode (1, node, true);
-					InsertText (startOffset, output.Text);
+					if (parentType.Kind == TypeKind.Enum) {
+						InsertText (startOffset, output.Text +",");
+					} else {
+						InsertText (startOffset, output.Text);
+					}
 					output.RegisterTrackedSegments (this, startOffset);
 				}
 				var tcs = new TaskCompletionSource<object> ();
@@ -233,7 +244,7 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 				return doc.Text;
 			}
 		}
-		public static TestRefactoringContext Create (string content)
+		public static TestRefactoringContext Create (string content, bool expectErrors = false)
 		{
 			int idx = content.IndexOf ("$");
 			if (idx >= 0)
@@ -250,13 +261,23 @@ namespace ICSharpCode.NRefactory.CSharp.CodeActions
 				selectionEnd = idx2 - 2;
 				idx = selectionEnd;
 			}
-			
-			var doc = new StringBuilderDocument (content);
-			var parser = new CSharpParser ();
-			var unit = parser.Parse (content, "program.cs");
-			foreach (var error in parser.Errors)
-				Console.WriteLine (error.Message);
-			Assert.IsFalse (parser.HasErrors, "File contains parsing errors.");
+
+			var doc = new StringBuilderDocument(content);
+			var parser = new CSharpParser();
+			var unit = parser.Parse(content, "program.cs");
+			if (!expectErrors) {
+				if (parser.HasErrors) {
+					Console.WriteLine (content);
+					Console.WriteLine ("----");
+				}
+				foreach (var error in parser.Errors) {
+					Console.WriteLine(error.Message);
+				}
+				Assert.IsFalse(parser.HasErrors, "The file contains unexpected parsing errors.");
+			} else {
+				Assert.IsTrue(parser.HasErrors, "Expected parsing errors, but the file doesn't contain any.");
+			}
+
 			unit.Freeze ();
 			var unresolvedFile = unit.ToTypeSystem ();
 			

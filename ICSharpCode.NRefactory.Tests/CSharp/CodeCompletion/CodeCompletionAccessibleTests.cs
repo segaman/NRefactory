@@ -29,6 +29,7 @@
 using System;
 using NUnit.Framework;
 using System.Diagnostics;
+using System.Linq;
 
 namespace ICSharpCode.NRefactory.CSharp.CodeCompletion
 {
@@ -1130,6 +1131,46 @@ class TestClass
 			Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
 		}
 	
+		[Test]
+		public void TestEnumInExtensionMethod()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(@"
+public enum TestEnum { A, B, C}
+static class Ext { public static void Foo(this object o, TestEnum str) {} }
+class Test
+{
+	public static void Main (string[] args)
+	{
+		$args.Foo($
+	}
+}");
+			Assert.IsNotNull (provider.Find ("TestEnum"), "enum 'TestEnum' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.A"), "enum 'TestEnum.A' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.B"), "enum 'TestEnum.B' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
+		}
+		
+		
+		[Test]
+		public void TestEnumInExtensionMethodStaticInvocation()
+		{
+			var provider = CodeCompletionBugTests.CreateCtrlSpaceProvider(@"
+public enum TestEnum { A, B, C}
+static class Ext { public static void Foo(this object o, TestEnum str) {} }
+class Test
+{
+	public static void Main (string[] args)
+	{
+		$Ext.Foo(args, $
+	}
+}");
+			Assert.IsNotNull (provider.Find ("TestEnum"), "enum 'TestEnum' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.A"), "enum 'TestEnum.A' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.B"), "enum 'TestEnum.B' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
+		}
+
+
 		[Test()]
 		public void TestEnumAsParameterCase2 ()
 		{
@@ -1182,24 +1223,71 @@ class TestClass
 		public void TestEnumInBinaryOperatorExpression ()
 		{
 			CodeCompletionBugTests.CombinedProviderTest (
-@"
+				@"
 [Flags]
 public enum TestEnum { A, B, C}
 
 class TestClass
 {
+public void Foo ()
+{
+$TestEnum test = TestEnum.A | T$
+}
+}", provider => {
+				Assert.IsNotNull (provider.Find ("TestEnum"), "enum 'TestEnum' not found.");
+				Assert.IsNotNull (provider.Find ("TestEnum.A"), "enum 'TestEnum.A' not found.");
+				Assert.IsNotNull (provider.Find ("TestEnum.B"), "enum 'TestEnum.B' not found.");
+				Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
+			});
+		}
+		
+		[Test()]
+		public void TestEnumComparison ()
+		{
+			var provider = CodeCompletionBugTests.CreateProvider(
+				@"
+public enum TestEnum { A, B, C}
+
+class TestClass
+{
+	public static TestEnum A (int i, int j, string s) {}
+
 	public void Foo ()
 	{
-		$TestEnum test = TestEnum.A | T$
+		$if (A(1,2,""foo"") == $
 	}
-}", provider => {
+}");
+			Assert.IsFalse(provider.AutoCompleteEmptyMatch);
 			Assert.IsNotNull (provider.Find ("TestEnum"), "enum 'TestEnum' not found.");
 			Assert.IsNotNull (provider.Find ("TestEnum.A"), "enum 'TestEnum.A' not found.");
 			Assert.IsNotNull (provider.Find ("TestEnum.B"), "enum 'TestEnum.B' not found.");
 			Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
-			});
 		}
+
 		
+		[Test()]
+		public void TestEnumComparisonCase2 ()
+		{
+			var provider = CodeCompletionBugTests.CreateProvider(
+				@"
+public enum TestEnum { A, B, C}
+
+class TestClass
+{
+	public static TestEnum A (int i, int j, string s) {}
+
+	public void Foo ()
+	{
+		$if (A(1,2,""foo"") != $
+	}
+}");
+			Assert.IsFalse(provider.AutoCompleteEmptyMatch);
+			Assert.IsNotNull (provider.Find ("TestEnum"), "enum 'TestEnum' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.A"), "enum 'TestEnum.A' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.B"), "enum 'TestEnum.B' not found.");
+			Assert.IsNotNull (provider.Find ("TestEnum.C"), "enum 'TestEnum.C' not found.");
+		}
+
 		[Test()]
 		public void TestPrimimitiveTypeCompletionString ()
 		{
@@ -1343,6 +1431,175 @@ public class Foo
     } 
 }", provider => {
 				Assert.IsNotNull (provider.Find ("Bar"), "'Bar' not found.");
+			});
+		}
+
+		[Test()]
+		public void TestImplicitShadowing ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+		namespace ConsoleApplication2
+		{
+			class A
+			{
+				public int Foo;
+			}
+
+			class B : A
+			{
+				public string Foo;
+			}
+
+			class Program
+			{
+				static void Main (string[] args)
+				{
+					var b = new B ();
+					$b.$
+				}
+			}
+		}", provider => {
+				int count = 0;
+				foreach (var data in provider.Data) 
+					if (data.DisplayText == "Foo")
+						count += data.HasOverloads ? data.OverloadedData.Count () : 1;
+				Assert.AreEqual (1, count);
+			});
+		}
+
+		[Test()]
+		public void TestOverrideFiltering ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+namespace ConsoleApplication2
+{
+    class A
+    {
+        public virtual int Foo { set {} }
+    }
+
+    class B : A
+    {
+        public override int Foo {
+            set {
+                base.Foo = value;
+            }
+        }
+    }
+
+    class Program
+    {
+        static void Main (string[] args)
+        {
+            var b = new B ();
+            $b.$
+        }
+    }
+}
+", provider => {
+				int count = 0;
+				foreach (var data in provider.Data) 
+					if (data.DisplayText == "Foo")
+						count += data.HasOverloads ? data.OverloadedData.Count () : 1;
+				Assert.AreEqual (1, count);
+			});
+		}
+
+
+		/// <summary>
+		/// Bug 5648 - Types are displayed even when cannot be used 
+		/// </summary>
+		[Test()]
+		public void TestBug5648 ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+namespace N
+{
+	$e$
+}
+", provider => {
+				Assert.IsNotNull (provider.Find ("enum"), "'enum' not found.");
+				Assert.IsNotNull (provider.Find ("namespace"), "'namespace' not found.");
+				Assert.IsNotNull (provider.Find ("public"), "'public' not found.");
+				Assert.IsNull (provider.Find ("CharEnumerator"), "'CharEnumerator' found.");
+				Assert.IsNull (provider.Find ("Console"), "'Console' found.");
+			});
+		}
+
+		[Test()]
+		public void CheckInstanceMembersAreHiddenInStaticMethod ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+class Test
+{
+	int foo;
+	int Foo { get { return foo; } }
+	void TestMethod () {}
+
+	public static void Main (string[] args)
+	{
+		$f$	
+	}
+}
+", provider => {
+				Assert.IsNotNull (provider.Find ("Main"), "'Main' not found.");
+				Assert.IsNotNull (provider.Find ("Test"), "'Test' not found.");
+				Assert.IsNull (provider.Find ("foo"), "'foo' found.");
+				Assert.IsNull (provider.Find ("Foo"), "'Foo' found.");
+				Assert.IsNull (provider.Find ("TestMethod"), "'TestMethod' found.");
+			});
+		}
+		
+		[Test]
+		public void TestVariableHiding ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+class Test
+{
+	static string test;
+
+	public static void Main (int test)
+	{
+		$f$	
+	}
+}
+", provider => {
+				Assert.AreEqual (1, provider.Data.Count (p => p.DisplayText == "test"));
+			});
+		}
+
+		[Test]
+		public void TestOverloadCount ()
+		{
+			CodeCompletionBugTests.CombinedProviderTest (@"
+using System;
+
+class Test
+{
+	static void Foo () {}
+	static void Foo (int i) {}
+	static void Foo (int i, string s) {}
+
+	public static void Main (int test)
+	{
+		$f$	
+	}
+}
+", provider => {
+				Assert.AreEqual (1, provider.Data.Count (p => p.DisplayText == "Foo"));
+				var data = provider.Find ("Foo");
+				Assert.AreEqual (3, data.OverloadedData.Count ());
+
 			});
 		}
 	}

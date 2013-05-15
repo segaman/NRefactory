@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -44,6 +44,7 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 			CSharpUnresolvedFile unresolvedFile = syntaxTree.ToTypeSystem();
 			project = project.AddOrUpdateFiles(unresolvedFile);
 			compilation = project.CreateCompilation();
+			lookup = new MemberLookup(null, compilation.MainAssembly);
 			return unresolvedFile;
 		}
 		
@@ -61,7 +62,7 @@ class Derived : Middle {
 	public override void Method() {}
 }";
 			var unresolvedFile = Parse(program);
-			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(unresolvedFile.TopLevelTypeDefinitions[2]);
+			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(new TopLevelTypeName("Derived"));
 			var rr = lookup.Lookup(new ResolveResult(derived), "Method", EmptyList<IType>.Instance, true) as MethodGroupResolveResult;
 			Assert.AreEqual(2, rr.MethodsGroupedByDeclaringType.Count());
 			
@@ -88,7 +89,7 @@ class Derived : Base<int> {
 	public override void Method(string a) {}
 }";
 			var unresolvedFile = Parse(program);
-			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(unresolvedFile.TopLevelTypeDefinitions[1]);
+			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(new TopLevelTypeName("Derived"));
 			var rr = lookup.Lookup(new ResolveResult(derived), "Method", EmptyList<IType>.Instance, true) as MethodGroupResolveResult;
 			Assert.AreEqual(2, rr.MethodsGroupedByDeclaringType.Count());
 			
@@ -116,7 +117,7 @@ class Derived : Base {
 	public override void Method<S>(S a) {}
 }";
 			var unresolvedFile = Parse(program);
-			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(unresolvedFile.TopLevelTypeDefinitions[1]);
+			ITypeDefinition derived = compilation.MainAssembly.GetTypeDefinition(new TopLevelTypeName("Derived"));
 			var rr = lookup.Lookup(new ResolveResult(derived), "Method", EmptyList<IType>.Instance, true) as MethodGroupResolveResult;
 			Assert.AreEqual(1, rr.MethodsGroupedByDeclaringType.Count());
 			
@@ -403,10 +404,10 @@ class TestClass {
 			var conversion = GetConversion(program);
 			Assert.IsTrue(conversion.IsValid);
 			Assert.IsTrue(conversion.IsMethodGroupConversion);
-			Assert.IsInstanceOf<SpecializedMethod>(conversion.Method);
+			Assert.IsTrue(conversion.Method.IsParameterized);
 			Assert.AreEqual(
 				new[] { "System.Int32" },
-				((SpecializedMethod)conversion.Method).TypeArguments.Select(t => t.ReflectionName).ToArray());
+				conversion.Method.TypeArguments.Select(t => t.ReflectionName).ToArray());
 		}
 		
 		[Test]
@@ -455,6 +456,112 @@ class TestClass {
 }";
 			var mrr = Resolve<MemberResolveResult>(program);
 			Assert.AreEqual("TestClass.B", mrr.Member.FullName);
+		}
+		
+		[Test]
+		public void GenericClassDoesNotHideField()
+		{
+			string program = @"using System;
+class A { public int F; }
+class B : A { public class F<T> {} }
+class C : B {
+	public void M()
+	{
+		$F$ = 1;
+	}
+}";
+			var mrr = Resolve<MemberResolveResult>(program);
+			Assert.AreEqual("A.F", mrr.Member.FullName);
+		}
+		
+		[Test]
+		public void NonGenericClassHidesField_WithExplicitThisAccess()
+		{
+			string program = @"using System;
+class A { public int F; }
+class B : A { public class F {} }
+class C : B {
+	public void M()
+	{
+		$this.F$ = 1;
+	}
+}";
+			var trr = Resolve<TypeResolveResult>(program);
+			Assert.AreEqual("B+F", trr.Type.ReflectionName);
+		}
+
+		/// <summary>
+		/// Bug 9604 - Completion problem with indexers
+		/// </summary>
+		[Test]
+		public void TestBug9604()
+		{
+			string program = @"class Item
+{
+    public static int Foo = 42;
+
+    public class Builder
+    {
+        public int Foo
+        {
+            get { return $Item.Foo$; }
+        }
+
+        public object this[int field, int i]
+        {
+            get { return null; }
+        }
+    }
+}
+";
+			var result = Resolve<MemberResolveResult>(program);
+			Assert.AreEqual("Item.Foo", result.Member.FullName);
+		}
+
+		[Test]
+		public void Test9604OperatorCase()
+		{
+			string program = @"class op_Addition
+{
+    public static int Foo = 42;
+
+    public class Builder
+    {
+        public int Foo
+        {
+            get { return $op_Addition.Foo$; }
+        }
+
+        public static int operator + (Builder a, Builder b) 
+		{
+			return 0;
+		}
+    }
+}
+";
+			var result = Resolve<MemberResolveResult>(program);
+			Assert.AreEqual("op_Addition.Foo", result.Member.FullName);
+		}
+
+		/// <summary>
+		/// Bug 10201 - Wrong generics expansion for base recursive types
+		/// </summary>
+		[Test]
+		public void TestBug10201()
+		{
+			string program = @"public interface IA<T>
+{
+}
+public class G<U, V> : IA<$G<V, string>$> 
+{}
+";
+			var rr = Resolve<TypeResolveResult>(program);
+			var baseType = rr.Type.DirectBaseTypes.First().TypeArguments.First () as ParameterizedType;
+			Assert.AreEqual("G", baseType.Name);
+			
+			Assert.AreEqual(2, baseType.TypeParameterCount);
+			Assert.AreEqual("System.String", baseType.TypeArguments [0].FullName);
+			Assert.AreEqual("System.String", baseType.TypeArguments [1].FullName);
 		}
 	}
 }

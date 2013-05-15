@@ -46,6 +46,16 @@ namespace ICSharpCode.NRefactory.CSharp.CodeIssues
 			CheckFix (context, issues [0], output);
 		}
 
+		[Ignore]
+		[Test]
+		public void TestUnderscoreFix ()
+		{
+			var input = @"namespace FIX_1 {}";
+			var output = @"namespace Fix1 {}";
+			CheckNaming (input, output);
+		}
+
+		[Ignore]
 		[Test]
 		public void TestNamespaceName ()
 		{
@@ -311,6 +321,16 @@ class MyClass : Base { public override int Method (int Param) {} }";
 			Assert.AreEqual ("long", result [2]);
 			Assert.AreEqual ("NAME", result [3]);
 		}
+
+		[Test]
+		public void TestUnderscoreCase1 ()
+		{
+			var result = WordParser.BreakWords ("FIX_1");
+			Assert.AreEqual (2, result.Count);
+			Assert.AreEqual ("FIX", result [0]);
+			Assert.AreEqual ("1", result [1]);
+		}
+
 	}
 }
 

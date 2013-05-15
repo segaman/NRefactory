@@ -34,7 +34,6 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			var eventDecl = node.Parent as EventDeclaration;
 			if (eventDecl == null)
 				return null;
-			// TODO: more than one variable
 			return new CodeAction (context.TranslateString ("Create custom event implementation"),
 				script =>
 				{
@@ -61,7 +60,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 						script.InsertBefore (eventDecl, newEventDecl);
 					}
 					script.Replace (eventDecl, e);
-				});
+				}, node.NameToken);
 		}
 	}
 }

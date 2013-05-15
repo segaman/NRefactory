@@ -87,6 +87,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 			yield return CreateAction(
 				context, 
+				invocation,
 				methodName, 
 				context.CreateShortType(invocationMethod.ReturnType),
 				invocationMethod.Parameters.Select(parameter => new ParameterDeclaration(context.CreateShortType(parameter.Type), parameter.Name) { 
@@ -119,6 +120,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 			yield return CreateAction(
 				context, 
+				identifier,
 				methodName, 
 				context.CreateShortType(invocationMethod.ReturnType),
 				invocationMethod.Parameters.Select(parameter => new ParameterDeclaration(context.CreateShortType(parameter.Type), parameter.Name) { 
@@ -168,6 +170,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 
 			yield return CreateAction(
 				context, 
+				invocation,
 				methodName, 
 				guessedType,
 				GenerateParameters(context, invocation.Arguments),
@@ -187,7 +190,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			return ParameterModifier.None;
 		}
 
-		static CodeAction CreateAction(RefactoringContext context, string methodName, AstType returnType, IEnumerable<ParameterDeclaration> parameters, bool createInOtherType, bool isStatic, ResolveResult targetResolveResult)
+		static CodeAction CreateAction(RefactoringContext context, AstNode createFromNode, string methodName, AstType returnType, IEnumerable<ParameterDeclaration> parameters, bool createInOtherType, bool isStatic, ResolveResult targetResolveResult)
 		{
 			return new CodeAction(context.TranslateString("Create method"), script => {
 				var decl = new MethodDeclaration() {
@@ -215,7 +218,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				}
 
 				script.InsertWithCursor(context.TranslateString("Create method"), Script.InsertPosition.Before, decl);
-			});
+			}, createFromNode);
 		}
 
 		public static IEnumerable<ParameterDeclaration> GenerateParameters(RefactoringContext context, IEnumerable<Expression> arguments)
@@ -240,7 +243,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					nameCounter [name]++;
 					name += nameCounter [name].ToString();
 				}
-				var type = resolveResult.Type.Kind == TypeKind.Unknown ? new PrimitiveType("object") : context.CreateShortType(resolveResult.Type);
+				var type = resolveResult.Type.Kind == TypeKind.Unknown || resolveResult.Type.Kind == TypeKind.Null ? new PrimitiveType("object") : context.CreateShortType(resolveResult.Type);
 
 				yield return new ParameterDeclaration(type, name) { ParameterModifier = direction};
 			}
@@ -278,6 +281,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		public static string CreateBaseName(AstNode node, IType type)
 		{
 			string name = null;
+			if (node is NullReferenceExpression)
+				return "o";
 			if (node is DirectionExpression)
 				node = ((DirectionExpression)node).Expression;
 			if (node is IdentifierExpression) {
@@ -291,14 +296,21 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				} else {
 					return char.ToLower(type.Name [0]).ToString();
 				}
+			} else if (node is ArrayCreateExpression) {
+				name = "arr";
 			} else {
 				if (type.Kind == TypeKind.Unknown)
 					return "par";
 				name = GuessNameFromType(type);
 			}
-
-			name = char.ToLower(name [0]) + name.Substring(1);
-			return name;
+			var sb = new StringBuilder ();
+			sb.Append (char.ToLower(name [0]));
+			for (int i = 1; i < name.Length; i++) {
+				var ch = name[i];
+				if (char.IsLetterOrDigit (ch) || ch == '_')
+					sb.Append (ch);
+			}
+			return sb.ToString ();
 		}
 
 		static string GuessNameFromType(IType returnType)

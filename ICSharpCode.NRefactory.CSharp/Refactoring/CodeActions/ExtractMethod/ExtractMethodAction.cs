@@ -52,12 +52,12 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 					yield break;
 				yield return codeAction;
 			}
-			
+
 			foreach (var node in selected) {
-				if (!(node is Statement))
+				if (!(node is Statement) && !(node is Comment) && !(node is NewLineNode) && !(node is PreProcessorDirective))
 					yield break;
 			}
-			var action = CreateFromStatements (context, new List<Statement> (selected.OfType<Statement> ()));
+			var action = CreateFromStatements (context, new List<AstNode> (selected));
 			if (action != null)
 				yield return action;
 		}
@@ -70,20 +70,40 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 			
 			return new CodeAction(context.TranslateString("Extract method"), script => {
 				string methodName = "NewMethod";
-				var method = new MethodDeclaration() {
+				var method = new MethodDeclaration {
 					ReturnType = context.CreateShortType(resolveResult.Type),
 					Name = methodName,
-					Body = new BlockStatement() {
+					Body = new BlockStatement {
 						new ReturnStatement(expression.Clone())
 					}
 				};
 				if (!StaticVisitor.UsesNotStaticMember(context, expression))
 					method.Modifiers |= Modifiers.Static;
+
+				var usedVariables = VariableLookupVisitor.Analyze(context, expression);
+				
+				var inExtractedRegion = new VariableUsageAnalyzation (context, usedVariables);
+
+				usedVariables.Sort ((l, r) => l.Region.Begin.CompareTo (r.Region.Begin));
+				var target = new IdentifierExpression(methodName);
+				var invocation = new InvocationExpression(target);
+				foreach (var variable in usedVariables) {
+					Expression argumentExpression = new IdentifierExpression(variable.Name); 
+					
+					var mod = ParameterModifier.None;
+					if (inExtractedRegion.GetStatus (variable) == VariableState.Changed) {
+						mod = ParameterModifier.Ref;
+						argumentExpression = new DirectionExpression(FieldDirection.Ref, argumentExpression);
+					}
+					
+					method.Parameters.Add(new ParameterDeclaration(context.CreateShortType(variable.Type), variable.Name, mod));
+					invocation.Arguments.Add(argumentExpression);
+				}
+
 				var task = script.InsertWithCursor(context.TranslateString("Extract method"), Script.InsertPosition.Before, method);
 
 				Action<Task> replaceStatements = delegate {
-					var target = new IdentifierExpression(methodName);
-					script.Replace(expression, new InvocationExpression(target));
+					script.Replace(expression, invocation);
 					script.Link(target, method.NameToken);
 				};
 
@@ -92,10 +112,10 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 				} else {
 					task.ContinueWith (replaceStatements, TaskScheduler.FromCurrentSynchronizationContext ());
 				}
-			});
+			}, expression);
 		}
 		
-		CodeAction CreateFromStatements(RefactoringContext context, List<Statement> statements)
+		CodeAction CreateFromStatements(RefactoringContext context, List<AstNode> statements)
 		{
 			if (!(statements [0].Parent is Statement))
 				return null;
@@ -108,9 +128,13 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 					Body = new BlockStatement()
 				};
 				bool usesNonStaticMember = false;
-				foreach (Statement node in statements) {
+				foreach (var node in statements) {
 					usesNonStaticMember |= StaticVisitor.UsesNotStaticMember(context, node);
-					method.Body.Add(node.Clone());
+					if (node is Statement) {
+						method.Body.Add((Statement)node.Clone());
+					} else {
+						method.Body.AddChildUnsafe (node.Clone (), node.Role);
+					}
 				}
 				if (!usesNonStaticMember)
 					method.Modifiers |= Modifiers.Static;
@@ -174,6 +198,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 				var task = script.InsertWithCursor(context.TranslateString("Extract method"), Script.InsertPosition.Before, method);
 				Action<Task> replaceStatements = delegate {
 					foreach (var node in statements.Skip (1)) {
+						if (node is NewLineNode)
+							continue;
 						script.Remove(node);
 					}
 					foreach (var variable in usedVariables) {
@@ -201,7 +227,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.ExtractMethod
 				} else {
 					task.ContinueWith (replaceStatements, TaskScheduler.FromCurrentSynchronizationContext ());
 				}
-			});
+			}, statements.First ().StartLocation, statements.Last ().EndLocation);
 		}
 	}
 }

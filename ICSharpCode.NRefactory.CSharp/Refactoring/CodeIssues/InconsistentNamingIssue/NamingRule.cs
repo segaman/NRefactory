@@ -1,4 +1,4 @@
-// 
+﻿// 
 // NamingRule.cs
 //  
 // Author:
@@ -82,7 +82,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			string id = name;
 			bool foundPrefix = false;
 			if (RequiredPrefixes != null && RequiredPrefixes.Length > 0) {
-				var prefix = RequiredPrefixes.FirstOrDefault(p => id.StartsWith(p));
+				var prefix = RequiredPrefixes.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
 				if (prefix == null) {
 					return false;
 				}
@@ -91,7 +91,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			}
 			
 			if (!foundPrefix && AllowedPrefixes != null && AllowedPrefixes.Length > 0) {
-				var prefix = AllowedPrefixes.FirstOrDefault(p => id.StartsWith(p));
+				var prefix = AllowedPrefixes.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
 				if (prefix != null) {
 					id = id.Substring(prefix.Length);
 					foundPrefix = true;
@@ -99,19 +99,19 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			}
 			
 			if (!foundPrefix && ForbiddenPrefixes != null && ForbiddenPrefixes.Length > 0) {
-				if (ForbiddenPrefixes.Any(p => id.StartsWith(p))) {
+				if (ForbiddenPrefixes.Any(p => id.StartsWith(p, StringComparison.Ordinal))) {
 					return false;
 				}
 			}
 			
 			if (RequiredSuffixes != null && RequiredSuffixes.Length > 0) {
-				var suffix = RequiredSuffixes.FirstOrDefault(s => id.EndsWith(s));
+				var suffix = RequiredSuffixes.FirstOrDefault(s => id.EndsWith(s, StringComparison.Ordinal));
 				if (suffix == null) {
 					return false;
 				}
 				id = id.Substring(0, id.Length - suffix.Length);
 			} else if (ForbiddenSuffixes != null && ForbiddenSuffixes.Length > 0) {
-				if (ForbiddenSuffixes.Any(p => id.EndsWith(p))) {
+				if (ForbiddenSuffixes.Any(p => id.EndsWith(p, StringComparison.Ordinal))) {
 					return false;
 				}
 			}
@@ -122,9 +122,9 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				case NamingStyle.AllUpper:
 					return !id.Any(ch => char.IsLetter(ch) && char.IsLower(ch));
 				case NamingStyle.CamelCase:
-					return id.Length == 0 || (char.IsLower(id [0]) && NoUnderscoreWithoutNumber(id));
+					return id.Length == 0 || (char.IsLower(id [0]) && NoUnderscore(id));
 				case NamingStyle.PascalCase:
-					return id.Length == 0 || (char.IsUpper(id [0]) && NoUnderscoreWithoutNumber(id));
+					return id.Length == 0 || (char.IsUpper(id [0]) && NoUnderscore(id));
 				case NamingStyle.FirstUpper:
 					return id.Length == 0 && char.IsUpper(id [0]) && !id.Skip(1).Any(ch => char.IsLetter(ch) && char.IsUpper(ch));
 			}
@@ -139,17 +139,22 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			IncludeInstanceMembers = true;
 		}
 
-		static bool NoUnderscoreWithoutNumber(string id)
+		static bool NoUnderscore(string id)
 		{
-			int idx = id.IndexOf('_');
-			while (idx >= 0 && idx < id.Length) {
-				if ((idx + 2 >= id.Length || !char.IsDigit(id [idx + 1])) && (idx == 0 || !char.IsDigit(id [idx - 1]))) {
-					return false;
-				}
-				idx = id.IndexOf('_', idx + 1);
-			}
-			return true;
+			return id.IndexOf('_') < 0;
 		}
+
+//		static bool NoUnderscoreWithoutNumber(string id)
+//		{
+//			int idx = id.IndexOf('_');
+//			while (idx >= 0 && idx < id.Length) {
+//				if ((idx + 2 >= id.Length || !char.IsDigit(id [idx + 1])) && (idx == 0 || !char.IsDigit(id [idx - 1]))) {
+//					return false;
+//				}
+//				idx = id.IndexOf('_', idx + 1);
+//			}
+//			return true;
+//		}
 
 
 		public string GetErrorMessage(BaseRefactoringContext ctx, string name, out IList<string> suggestedNames)
@@ -166,14 +171,14 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			string suffix = null;
 			
 			if (AllowedPrefixes != null && AllowedPrefixes.Length > 0) {
-				allowedPrefix = AllowedPrefixes.FirstOrDefault(p => id.StartsWith(p));
+				allowedPrefix = AllowedPrefixes.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
 				if (allowedPrefix != null)
 					id = id.Substring(allowedPrefix.Length);
 
 			}
 
 			if (RequiredPrefixes != null && RequiredPrefixes.Length > 0) {
-				requiredPrefix = RequiredPrefixes.FirstOrDefault(p => id.StartsWith(p));
+				requiredPrefix = RequiredPrefixes.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
 				if (requiredPrefix == null) {
 					errorMessage = string.Format(ctx.TranslateString("Name should have prefix '{0}'."), RequiredPrefixes [0]);
 					missingRequiredPrefix = true;
@@ -181,7 +186,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					id = id.Substring(requiredPrefix.Length);
 				}
 			} else if (ForbiddenPrefixes != null && ForbiddenPrefixes.Length > 0) {
-				requiredPrefix = ForbiddenPrefixes.FirstOrDefault(p => id.StartsWith(p));
+				requiredPrefix = ForbiddenPrefixes.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
 				if (requiredPrefix != null) {
 					errorMessage = string.Format(ctx.TranslateString("Name has forbidden prefix '{0}'."), requiredPrefix);
 					id = id.Substring(requiredPrefix.Length);
@@ -189,7 +194,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			}
 			
 			if (RequiredSuffixes != null && RequiredSuffixes.Length > 0) {
-				suffix = RequiredSuffixes.FirstOrDefault(s => id.EndsWith(s));
+				suffix = RequiredSuffixes.FirstOrDefault(s => id.EndsWith(s, StringComparison.Ordinal));
 				if (suffix == null) {
 					errorMessage = string.Format(ctx.TranslateString("Name should have suffix '{0}'."), RequiredSuffixes [0]);
 					missingRequiredSuffix = true;
@@ -197,7 +202,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 					id = id.Substring(0, id.Length - suffix.Length);
 				}
 			} else if (ForbiddenSuffixes != null && ForbiddenSuffixes.Length > 0) {
-				suffix = ForbiddenSuffixes.FirstOrDefault(p => id.EndsWith(p));
+				suffix = ForbiddenSuffixes.FirstOrDefault(p => id.EndsWith(p, StringComparison.Ordinal));
 				if (suffix != null) {
 					errorMessage = string.Format(ctx.TranslateString("Name has forbidden suffix '{0}'."), suffix);
 					id = id.Substring(0, id.Length - suffix.Length);
@@ -224,7 +229,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				case NamingStyle.CamelCase:
 					if (id.Length > 0 && char.IsUpper(id [0])) {
 						errorMessage = string.Format(ctx.TranslateString("'{0}' should start with a lower case letter."), name);
-					} else if (!NoUnderscoreWithoutNumber(id)) {
+					} else if (!NoUnderscore(id)) {
 						errorMessage = string.Format(ctx.TranslateString("'{0}' should not separate words with an underscore."), name);
 					} else {
 						suggestedNames.Add(id);
@@ -235,7 +240,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				case NamingStyle.PascalCase:
 					if (id.Length > 0 && char.IsLower(id [0])) {
 						errorMessage = string.Format(ctx.TranslateString("'{0}' should start with an upper case letter."), name);
-					} else if (!NoUnderscoreWithoutNumber(id)) {
+					} else if (!NoUnderscore(id)) {
 						errorMessage = string.Format(ctx.TranslateString("'{0}' should not separate words with an underscore."), name);
 					} else {
 						suggestedNames.Add(id);
@@ -310,8 +315,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			var sb = new StringBuilder ();
 			sb.Append (words[0].ToLower ());
 			for (int i = 1; i < words.Count; i++) {
-				if (sb.Length > 0 && (char.IsDigit (sb[sb.Length-1]) || char.IsDigit (words[i][0])))
-					sb.Append ('_');
+//				if (sb.Length > 0 && (char.IsDigit (sb[sb.Length-1]) || char.IsDigit (words[i][0])))
+//					sb.Append ('_');
 				AppendCapitalized (words[i], sb);
 			}
 			return sb.ToString ();
@@ -321,8 +326,8 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			var sb = new StringBuilder ();
 			for (int i = 0; i < words.Count; i++) {
-				if (sb.Length > 0 && (char.IsDigit (sb[sb.Length-1]) || char.IsDigit (words[i][0])))
-					sb.Append ('_');
+//				if (sb.Length > 0 && (char.IsDigit (sb[sb.Length-1]) || char.IsDigit (words[i][0])))
+//					sb.Append ('_');
 				AppendCapitalized (words[i], sb);
 			}
 			return sb.ToString ();

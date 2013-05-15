@@ -35,6 +35,8 @@ using ICSharpCode.NRefactory.TypeSystem.Implementation;
 using ICSharpCode.NRefactory.Editor;
 using System.ComponentModel.Design;
 using ICSharpCode.NRefactory.CSharp.Analysis;
+using ICSharpCode.NRefactory.Utils;
+using System.Collections.Generic;
 
 namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
@@ -86,6 +88,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			this.resolver = resolver;
 			this.cancellationToken = cancellationToken;
+			this.referenceFinder = new LocalReferenceFinder(resolver);
 		}
 
 
@@ -119,6 +122,12 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			return resolver.GetConversion(expression, cancellationToken);
 		}
+		
+		public TypeSystemAstBuilder CreateTypeSytemAstBuilder(AstNode node)
+		{
+			var csResolver = resolver.GetResolverStateBefore(node);
+			return new TypeSystemAstBuilder(csResolver);
+		}
 		#endregion
 
 		#region Code Analyzation
@@ -149,6 +158,25 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		{
 			return ReachabilityAnalysis.Create (statement, resolver, CancellationToken);
 		}
+
+		/// <summary>
+		/// Parses a composite format string.
+		/// </summary>
+		/// <returns>
+		/// The format string parsing result.
+		/// </returns>
+		public virtual FormatStringParseResult ParseFormatString(string source)
+		{
+			return new CompositeFormatStringParser().Parse(source);
+		}
+
+		LocalReferenceFinder referenceFinder;
+
+		public IList<ReferenceResult> FindReferences(AstNode rootNode, IVariable variable)
+		{
+			return referenceFinder.FindReferences(rootNode, variable);
+		}
+
 		#endregion
 
 		/// <summary>
@@ -163,13 +191,14 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		}
 
 		#region IServiceProvider implementation
-		readonly ServiceContainer services = new ServiceContainer();
+		IServiceContainer services = new ServiceContainer();
 		
 		/// <summary>
 		/// Gets a service container used to associate services with this context.
 		/// </summary>
-		public ServiceContainer Services {
+		public IServiceContainer Services {
 			get { return services; }
+			protected set { services = value; }
 		}
 		
 		/// <summary>

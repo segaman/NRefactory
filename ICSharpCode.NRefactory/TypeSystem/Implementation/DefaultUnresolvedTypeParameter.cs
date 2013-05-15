@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -155,6 +155,22 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				FreezableHelper.ThrowIfFrozen(this);
 				flags[FlagValueTypeConstraint] = value;
 			}
+		}
+		
+		/// <summary>
+		/// Uses the specified interning provider to intern
+		/// strings and lists in this entity.
+		/// This method does not test arbitrary objects to see if they implement ISupportsInterning;
+		/// instead we assume that those are interned immediately when they are created (before they are added to this entity).
+		/// </summary>
+		public virtual void ApplyInterningProvider(InterningProvider provider)
+		{
+			if (provider == null)
+				throw new ArgumentNullException("provider");
+			FreezableHelper.ThrowIfFrozen(this);
+			name = provider.Intern(name);
+			attributes = provider.InternList(attributes);
+			constraints = provider.InternList(constraints);
 		}
 		
 		public virtual ITypeParameter CreateResolvedTypeParameter(ITypeResolveContext context)

@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -55,7 +55,7 @@ namespace ICSharpCode.NRefactory.CSharp.Parser.Expression
 			CheckIdentifier(@"l\U00000065xer", "lexer");
 		}
 		
-		[Test, Ignore("The @ should not be part of IdentifierExpression.Identifier")]
+		[Test]
 		public void TestKeyWordAsIdentifier()
 		{
 			CheckIdentifier("@int", "int");
@@ -67,7 +67,7 @@ namespace ICSharpCode.NRefactory.CSharp.Parser.Expression
 			CheckIdentifier(@"i\u006et", "int");
 		}
 		
-		[Test, Ignore("The @ should not be part of IdentifierExpression.Identifier")]
+		[Test]
 		public void TestKeyWordAsIdentifierStartingWithUnderscore()
 		{
 			CheckIdentifier("@_int", "_int");
@@ -97,6 +97,18 @@ namespace ICSharpCode.NRefactory.CSharp.Parser.Expression
 						new PrimitiveType("string")
 					}
 				}.IsMatch(ident));
+		}
+
+		
+		[Test]
+		public void TestVerbatimIdentifier()
+		{
+			var tree = SyntaxTree.Parse ("class @foo {}");
+			var ident = tree.GetNodeAt<Identifier> (1, 8);
+			Assert.IsNotNull (ident);
+			Assert.IsTrue (ident.IsVerbatim);
+			Assert.AreEqual (new TextLocation (1, 7), ident.StartLocation);
+			Assert.AreEqual (new TextLocation (1, 11), ident.EndLocation);
 		}
 	}
 }

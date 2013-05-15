@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -118,6 +118,10 @@ namespace ICSharpCode.NRefactory.CSharp
 			set { SetChildByRole(PrecedingQueryRole, value); }
 		}
 		
+		public CSharpTokenNode IntoKeyword {
+			get { return GetChildByRole (IntoKeywordRole); }
+		}
+
 		public string Identifier {
 			get {
 				return GetChildByRole (Roles.Identifier).Name;
@@ -158,6 +162,10 @@ namespace ICSharpCode.NRefactory.CSharp
 		public static readonly TokenRole FromKeywordRole =  new TokenRole ("from");
 		public static readonly TokenRole InKeywordRole =  new TokenRole ("in");
 		
+		public CSharpTokenNode FromKeyword {
+			get { return GetChildByRole (FromKeywordRole); }
+		}
+
 		public AstType Type {
 			get { return GetChildByRole (Roles.Type); }
 			set { SetChildByRole (Roles.Type, value); }
@@ -176,6 +184,10 @@ namespace ICSharpCode.NRefactory.CSharp
 			get { return GetChildByRole(Roles.Identifier); }
 		}
 		
+		public CSharpTokenNode InKeyword {
+			get { return GetChildByRole (InKeywordRole); }
+		}
+
 		public Expression Expression {
 			get { return GetChildByRole (Roles.Expression); }
 			set { SetChildByRole (Roles.Expression, value); }

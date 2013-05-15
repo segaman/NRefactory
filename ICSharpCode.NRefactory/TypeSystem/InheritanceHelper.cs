@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -57,6 +57,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 				yield return member;
 			}
 			
+			// TODO: can we get rid of this upcast?
 			SpecializedMember specializedMember = member as SpecializedMember;
 			member = member.MemberDefinition;
 			
@@ -79,7 +80,7 @@ namespace ICSharpCode.NRefactory.TypeSystem
 				foreach (IMember baseMember in baseMembers) {
 					if (SignatureComparer.Ordinal.Equals(member, baseMember)) {
 						if (specializedMember != null)
-							yield return SpecializedMember.Create(baseMember, specializedMember.Substitution);
+							yield return baseMember.Specialize(specializedMember.Substitution);
 						else
 							yield return baseMember;
 					}
@@ -98,6 +99,9 @@ namespace ICSharpCode.NRefactory.TypeSystem
 				throw new ArgumentNullException("baseMember");
 			if (derivedType == null)
 				throw new ArgumentNullException("derivedType");
+			
+			if (baseMember.Compilation != derivedType.Compilation)
+				throw new ArgumentException("baseMember and derivedType must be from the same compilation");
 			
 			baseMember = baseMember.MemberDefinition;
 			bool includeInterfaces = baseMember.DeclaringTypeDefinition.Kind == TypeKind.Interface;

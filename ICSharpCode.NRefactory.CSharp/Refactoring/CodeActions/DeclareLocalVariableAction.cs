@@ -63,21 +63,22 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 				var name = CreateMethodDeclarationAction.CreateBaseName(expr, guessedType);
 				var type = context.UseExplicitTypes ? context.CreateShortType(guessedType) : new SimpleType("var");
 				var varDecl = new VariableDeclarationStatement(type, name, expr.Clone());
-				if (expr.Parent is ExpressionStatement) {
-					script.Replace(expr.Parent, varDecl);
+				var replaceNode = visitor.Matches.First () as Expression;
+				if (replaceNode.Parent is ExpressionStatement) {
+					script.Replace(replaceNode.Parent, varDecl);
 					script.Select(varDecl.Variables.First().NameToken);
 				} else {
-					var containing = expr.Parent;
+					var containing = replaceNode.Parent;
 					while (!(containing.Parent is BlockStatement)) {
 						containing = containing.Parent;
 					}
 
 					script.InsertBefore(containing, varDecl);
 					var identifierExpression = new IdentifierExpression(name);
-					script.Replace(expr, identifierExpression);
+					script.Replace(replaceNode, identifierExpression);
 					script.Link(varDecl.Variables.First().NameToken, identifierExpression);
 				}
-			});
+			}, expr);
 
 			if (visitor.Matches.Count > 1) {
 				yield return new CodeAction(string.Format(context.TranslateString("Declare local variable (replace '{0}' occurrences)"), visitor.Matches.Count), script => {
@@ -111,7 +112,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 						script.Replace(visitor.Matches [i], identifierExpression);
 					}
 					script.Link(linkedNodes.ToArray ());
-				});
+				}, expr);
 			}
 		}
 
@@ -141,7 +142,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 		}
 
 				
-		class SearchNodeVisitior : DepthFirstAstVisitor
+		internal class SearchNodeVisitior : DepthFirstAstVisitor
 		{
 			readonly AstNode searchForNode;
 			public readonly List<AstNode> Matches = new List<AstNode> ();
@@ -149,14 +150,24 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring
 			public SearchNodeVisitior (AstNode searchForNode)
 			{
 				this.searchForNode = searchForNode;
-				Matches.Add (searchForNode);
+				AddNode (searchForNode);
+			}
+
+			void AddNode(AstNode node)
+			{
+				if (node.Parent is ParenthesizedExpression) {
+					Matches.Add(node.Parent);
+				} else {
+					Matches.Add(node);
+				}
 			}
 			
 			protected override void VisitChildren(AstNode node)
 			{
-
-				if (node.StartLocation > searchForNode.StartLocation && node.IsMatch (searchForNode))
-					Matches.Add (node);
+				if (node.StartLocation > searchForNode.StartLocation && node.IsMatch(searchForNode)) {
+					AddNode(node);
+					return;
+				} 
 				base.VisitChildren (node);
 			}
 		}

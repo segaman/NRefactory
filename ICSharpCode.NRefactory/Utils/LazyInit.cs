@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -25,7 +25,7 @@ namespace ICSharpCode.NRefactory.Utils
 	{
 		public static T VolatileRead<T>(ref T location) where T : class
 		{
-			#if NET45
+			#if NET_4_5
 			return Volatile.Read(ref location);
 			#else
 			T result = location;
@@ -35,7 +35,7 @@ namespace ICSharpCode.NRefactory.Utils
 		}
 		
 		/// <summary>
-		/// Atomatically performs the following operation:
+		/// Atomically performs the following operation:
 		/// - If target is null: stores newValue in target and returns newValue.
 		/// - If target is not null: returns target.
 		/// </summary>

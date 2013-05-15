@@ -1,4 +1,4 @@
-// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -244,6 +244,8 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 					scope = FindMemberReferences(entity, m => new FindPropertyReferences((IProperty)m));
 					if (entity.Name == "Current")
 						additionalScope = FindEnumeratorCurrentReferences((IProperty)entity);
+					else if (entity.Name == "IsCompleted")
+						additionalScope = FindAwaiterIsCompletedReferences((IProperty)entity);
 					break;
 				case EntityType.Event:
 					scope = FindMemberReferences(entity, m => new FindEventReferences((IEvent)m));
@@ -284,6 +286,14 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 				return new[] { scope };
 			}
 		}
+
+		public IList<IFindReferenceSearchScope> GetSearchScopes(INamespace ns)
+		{
+			if (ns == null)
+				throw new ArgumentNullException("ns");
+			return new[] { GetSearchScopeForNamespace(ns) };
+		}
+
 		#endregion
 		
 		#region GetInterestingFileNames
@@ -379,8 +389,6 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 		{
 			if (searchScopes == null)
 				throw new ArgumentNullException("searchScopes");
-			if (unresolvedFile == null)
-				throw new ArgumentNullException("unresolvedFile");
 			if (syntaxTree == null)
 				throw new ArgumentNullException("syntaxTree");
 			if (compilation == null)
@@ -661,6 +669,15 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 					return imported != null ? new FindEnumeratorCurrentReferencesNavigator(imported) : null;
 				});
 		}
+
+		SearchScope FindAwaiterIsCompletedReferences(IProperty property)
+		{
+			return new SearchScope(
+				delegate(ICompilation compilation) {
+					IProperty imported = compilation.Import(property);
+					return imported != null ? new FindAwaiterIsCompletedReferencesNavigator(imported) : null;
+				});
+		}
 		
 		sealed class FindEnumeratorCurrentReferencesNavigator : FindReferenceNavigator
 		{
@@ -680,6 +697,27 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 			{
 				ForEachResolveResult ferr = rr as ForEachResolveResult;
 				return ferr != null && ferr.CurrentProperty != null && findReferences.IsMemberMatch(property, ferr.CurrentProperty, true);
+			}
+		}
+
+		sealed class FindAwaiterIsCompletedReferencesNavigator : FindReferenceNavigator
+		{
+			IProperty property;
+			
+			public FindAwaiterIsCompletedReferencesNavigator(IProperty property)
+			{
+				this.property = property;
+			}
+			
+			internal override bool CanMatch(AstNode node)
+			{
+				return node is UnaryOperatorExpression;
+			}
+			
+			internal override bool IsMatch(ResolveResult rr)
+			{
+				AwaitResolveResult arr = rr as AwaitResolveResult;
+				return arr != null && arr.IsCompletedProperty != null && findReferences.IsMemberMatch(property, arr.IsCompletedProperty, true);
 			}
 		}
 		#endregion
@@ -723,6 +761,12 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 				case "GetEnumerator":
 				case "MoveNext":
 					specialNodeType = typeof(ForeachStatement);
+					break;
+				case "GetAwaiter":
+				case "GetResult":
+				case "OnCompleted":
+				case "UnsafeOnCompleted":
+					specialNodeType = typeof(UnaryOperatorExpression);
 					break;
 				default:
 					specialNodeType = null;
@@ -793,6 +837,12 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 					if (ferr != null) {
 						return IsMatch(ferr.GetEnumeratorCall)
 							|| (ferr.MoveNextMethod != null && findReferences.IsMemberMatch(method, ferr.MoveNextMethod, true));
+					}
+					var arr = rr as AwaitResolveResult;
+					if (arr != null) {
+						return IsMatch(arr.GetAwaiterInvocation)
+						    || (arr.GetResultMethod != null && findReferences.IsMemberMatch(method, arr.GetResultMethod, true))
+						    || (arr.OnCompletedMethod != null && findReferences.IsMemberMatch(method, arr.OnCompletedMethod, true));
 					}
 				}
 				var mrr = rr as MemberResolveResult;
@@ -1267,6 +1317,64 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 			{
 				var lrr = rr as TypeResolveResult;
 				return lrr != null && lrr.Type.Kind == TypeKind.TypeParameter && ((ITypeParameter)lrr.Type).Region == typeParameter.Region;
+			}
+		}
+		#endregion
+	
+		#region Find Namespace References
+		SearchScope GetSearchScopeForNamespace(INamespace ns)
+		{
+			var scope = new SearchScope (
+				delegate (ICompilation compilation) {
+				return new FindNamespaceNavigator (ns);
+			}
+			);
+			return scope;
+		}
+
+		sealed class FindNamespaceNavigator : FindReferenceNavigator
+		{
+			readonly INamespace ns;
+
+			public FindNamespaceNavigator (INamespace ns)
+			{
+				this.ns = ns;
+			}
+
+			internal override bool CanMatch(AstNode node)
+			{
+				var nsd = node as NamespaceDeclaration;
+				if (nsd != null && nsd.FullName.StartsWith(ns.FullName, StringComparison.Ordinal))
+					return true;
+
+				var ud = node as UsingDeclaration;
+				if (ud != null && ud.Namespace == ns.FullName)
+					return true;
+
+				var st = node as SimpleType;
+				if (st != null && st.Identifier == ns.Name)
+					return true;
+
+				var mt = node as MemberType;
+				if (mt != null && mt.MemberName == ns.Name)
+					return true;
+
+				var identifer = node as IdentifierExpression;
+				if (identifer != null && identifer.Identifier == ns.Name)
+					return true;
+
+				var mrr = node as MemberReferenceExpression;
+				if (mrr != null && mrr.MemberName == ns.Name)
+					return true;
+
+
+				return false;
+			}
+
+			internal override bool IsMatch(ResolveResult rr)
+			{
+				var nsrr = rr as NamespaceResolveResult;
+				return nsrr != null && nsrr.NamespaceName.StartsWith(ns.FullName, StringComparison.Ordinal);
 			}
 		}
 		#endregion

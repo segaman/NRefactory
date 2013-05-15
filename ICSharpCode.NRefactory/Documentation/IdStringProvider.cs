@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -285,11 +285,11 @@ namespace ICSharpCode.NRefactory.Documentation
 					// method type parameter reference
 					pos++;
 					int index = ReflectionHelper.ReadTypeParameterCount(reflectionTypeName, ref pos);
-					result = new TypeParameterReference(EntityType.Method, index);
+					result = TypeParameterReference.Create(EntityType.Method, index);
 				} else {
 					// class type parameter reference
 					int index = ReflectionHelper.ReadTypeParameterCount(reflectionTypeName, ref pos);
-					result = new TypeParameterReference(EntityType.TypeDefinition, index);
+					result = TypeParameterReference.Create(EntityType.TypeDefinition, index);
 				}
 			} else {
 				// not a type parameter reference: read the actual type name

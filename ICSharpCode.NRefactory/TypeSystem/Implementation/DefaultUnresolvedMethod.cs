@@ -1,4 +1,4 @@
-﻿// Copyright (c) AlphaSierraPapa for the SharpDevelop Team
+﻿// Copyright (c) 2010-2013 AlphaSierraPapa for the SharpDevelop Team
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
 // software and associated documentation files (the "Software"), to deal in the Software
@@ -42,7 +42,19 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			base.FreezeInternal();
 		}
 		
-		public override void ApplyInterningProvider(IInterningProvider provider)
+		public override object Clone()
+		{
+			var copy = (DefaultUnresolvedMethod)base.Clone();
+			if (returnTypeAttributes != null)
+				copy.returnTypeAttributes = new List<IUnresolvedAttribute>(returnTypeAttributes);
+			if (typeParameters != null)
+				copy.typeParameters = new List<IUnresolvedTypeParameter>(typeParameters);
+			if (parameters != null)
+				copy.parameters = new List<IUnresolvedParameter>(parameters);
+			return copy;
+		}
+		
+		public override void ApplyInterningProvider(InterningProvider provider)
 		{
 			base.ApplyInterningProvider(provider);
 			if (provider != null) {
@@ -102,19 +114,53 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 			get { return this.EntityType == EntityType.Operator; }
 		}
 		
-		public bool IsPartialMethodDeclaration {
-			get { return flags[FlagPartialMethodDeclaration]; }
+		public bool IsPartial {
+			get { return flags[FlagPartialMethod]; }
 			set {
 				ThrowIfFrozen();
-				flags[FlagPartialMethodDeclaration] = value;
+				flags[FlagPartialMethod] = value;
+			}
+		}
+
+		public bool IsAsync {
+			get { return flags[FlagAsyncMethod]; }
+			set {
+				ThrowIfFrozen();
+				flags[FlagAsyncMethod] = value;
+			}
+		}
+
+		public bool HasBody {
+			get { return flags[FlagHasBody]; }
+			set {
+				ThrowIfFrozen();
+				flags[FlagHasBody] = value;
 			}
 		}
 		
-		public bool IsPartialMethodImplementation {
-			get { return flags[FlagPartialMethodImplemenation]; }
+		[Obsolete]
+		public bool IsPartialMethodDeclaration {
+			get { return IsPartial && !HasBody; }
 			set {
-				ThrowIfFrozen();
-				flags[FlagPartialMethodImplemenation] = value;
+				if (value) {
+					IsPartial = true;
+					HasBody = false;
+				} else if (!value && IsPartial && !HasBody) {
+					IsPartial = false;
+				}
+			}
+		}
+		
+		[Obsolete]
+		public bool IsPartialMethodImplementation {
+			get { return IsPartial && HasBody; }
+			set {
+				if (value) {
+					IsPartial = true;
+					HasBody = true;
+				} else if (!value && IsPartial && HasBody) {
+					IsPartial = false;
+				}
 			}
 		}
 		
@@ -206,7 +252,9 @@ namespace ICSharpCode.NRefactory.TypeSystem.Implementation
 				EntityType = EntityType.Constructor,
 				Accessibility = typeDefinition.IsAbstract ? Accessibility.Protected : Accessibility.Public,
 				IsSynthetic = true,
+				HasBody = true,
 				Region = region,
+				BodyRegion = region,
 				ReturnType = KnownTypeReference.Void
 			};
 		}

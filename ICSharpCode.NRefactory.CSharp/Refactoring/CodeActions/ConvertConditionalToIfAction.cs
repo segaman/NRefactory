@@ -28,7 +28,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ICSharpCode.NRefactory.CSharp.Refactoring.CodeActions
+namespace ICSharpCode.NRefactory.CSharp.Refactoring
 {
 	[ContextAction ("Convert '?:' to 'if'", Description = "Convert '?:' operator to 'if' statement.")]
 	public class ConvertConditionalToIfAction : ICodeActionProvider
@@ -103,7 +103,9 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.CodeActions
 							  Func<ConditionalExpression, IEnumerable<Statement>> getReplacement)
 		{
 			var conditionalExpr = GetConditionalExpression (conditionalCandidate);
-			if (conditionalExpr == null)
+			if (conditionalExpr == null || 
+				!(conditionalExpr.QuestionMarkToken.Contains(context.Location) ||
+				  conditionalExpr.ColonToken.Contains(context.Location)))
 				return null;
 
 			return new CodeAction (context.TranslateString ("Convert '?:' to 'if'"),
@@ -112,7 +114,7 @@ namespace ICSharpCode.NRefactory.CSharp.Refactoring.CodeActions
 					foreach (var node in getReplacement (conditionalExpr))
 						script.InsertBefore (originalStatement, node);
 					script.Remove (originalStatement);
-				});
+			}, conditionalExpr);
 		}
 
 		static ConditionalExpression GetConditionalExpression (Expression expr)
